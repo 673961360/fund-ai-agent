@@ -218,19 +218,21 @@ v0 的成功不以“功能数量”作为第一标准，而以“边界与可�
 
 当前处于：
 
-**阶段 1：文档真源落盘 + 项目空骨架搭建**
+**阶段 2：统一模型、契约对齐、最小联调准备**
 
-阶段 1 的重点不是实现真实逻辑，而是：
+阶段 2 的重点不是进入真实集成，而是：
 
-- 固化文档真源
-- 固化协议真源
-- 创建 backend / frontend 空骨架
-- 固化命名、资源模型、状态模型、接口占位
-- 明确哪些能力是后续阶段再做
+- 对齐统一模型
+- 对齐契约定义
+- 补齐状态枚举与状态流转
+- 细化 Tool Gateway / Workflow Adapter 契约
+- 为最小闭环联调做好文档与契约准备
 
-阶段 1 的详细边界与交付物以：
+当前阶段 `Decision Service` 仍仅以 `core/policies` 形式占位，不代表已经形成独立服务实现。
 
-`docs/phases/stage-1-deliverables.md`
+当前阶段的详细边界与交付物以：
+
+`docs/phases/stage-2-deliverables.md`
 
 为准。
 
@@ -239,13 +241,13 @@ v0 的成功不以“功能数量”作为第一标准，而以“边界与可�
 ## 10. 后续阶段关系
 
 ### 阶段 1
-文档真源 + 骨架
+已完成：文档真源 + 骨架
 
 ### 阶段 2
-补统一模型、抽象接口、schema / DTO / types 对齐检查
+当前进行中：统一模型、契约对齐、最小联调准备
 
 ### 阶段 3
-在不接 QwenPaw 真集成前提下，使用 MockRuntimeAdapter 做最小闭环联调
+待进入：在不接 QwenPaw 真集成前提下，使用 MockRuntimeAdapter 做最小闭环联调
 
 ### 阶段 4
 在 QwenPaw 协议确认后，再接入 QwenPawAdapter 真实实现
@@ -272,7 +274,7 @@ v0 的成功不以“功能数量”作为第一标准，而以“边界与可�
 
 1. `AGENTS.md`
 2. `docs/project/project-brief.md`
-3. `docs/phases/stage-1-deliverables.md`
+3. `docs/phases/stage-2-deliverables.md`
 4. `docs/frontend/vue3-ruler-skills-compact.md`（涉及前端任务时必读）
 5. 当前阶段涉及的 contracts 文档
 6. 当前阶段涉及的 architecture / integration 文档

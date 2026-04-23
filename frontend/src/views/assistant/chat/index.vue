@@ -21,6 +21,12 @@
 </template>
 
 <script setup lang="ts">
+/*
+ * Stage 1 structural placeholder only.
+ * Later frontend work must align with docs/frontend/vue3-ruler-skills-compact.md.
+ * Do not introduce real interaction, request, or streaming logic in this stage.
+ */
+
 import ConfirmationDialog from './components/confirmation-dialog.vue'
 import MessageInputBox from './components/message-input-box.vue'
 import MessageListPanel from './components/message-list-panel.vue'
@@ -50,4 +56,3 @@ import SessionListPanel from './components/session-list-panel.vue'
   gap: 16px;
 }
 </style>
-

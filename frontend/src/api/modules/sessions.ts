@@ -1,8 +1,12 @@
 import { gatewayHttpClient } from '../http'
-import type { MessageResource, SessionResource } from '../../types/gateway'
+import type {
+  MessageListResource,
+  SessionListResource,
+  SessionResource,
+} from '../../types/gateway'
 
-export function listSessions(signal?: AbortSignal): Promise<SessionResource[]> {
-  return gatewayHttpClient.get<SessionResource[]>({
+export function listSessions(signal?: AbortSignal): Promise<SessionListResource> {
+  return gatewayHttpClient.get<SessionListResource>({
     path: '/sessions',
     signal,
   })
@@ -18,10 +22,9 @@ export function getSession(sessionId: string, signal?: AbortSignal): Promise<Ses
 export function listSessionMessages(
   sessionId: string,
   signal?: AbortSignal,
-): Promise<MessageResource[]> {
-  return gatewayHttpClient.get<MessageResource[]>({
+): Promise<MessageListResource> {
+  return gatewayHttpClient.get<MessageListResource>({
     path: `/sessions/${sessionId}/messages`,
     signal,
   })
 }
-

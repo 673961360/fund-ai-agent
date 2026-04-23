@@ -28,6 +28,10 @@ export interface SessionResource {
   updated_at: ISODateTimeString | null
 }
 
+export interface SessionListResource {
+  items: SessionResource[]
+}
+
 export interface MessageResource {
   id: Identifier
   session_id: Identifier
@@ -36,6 +40,10 @@ export interface MessageResource {
   content: string
   attachments: AttachmentPlaceholder[]
   created_at: ISODateTimeString
+}
+
+export interface MessageListResource {
+  items: MessageResource[]
 }
 
 export interface CreateRequestPayload {

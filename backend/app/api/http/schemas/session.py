@@ -25,7 +25,6 @@ class SessionSchema(BaseModel):
 
 
 class SessionListSchema(BaseModel):
-    """Placeholder list response for sessions."""
+    """Placeholder list response for sessions using the `{ items: [...] }` shape."""
 
     items: list[SessionSchema] = Field(default_factory=list)
-

@@ -32,6 +32,7 @@
 - 负责统一接收请求、分配 `request_id` 与 `trace_id`
 - 负责会话映射、基础审计位、确认对象创建占位
 - 负责把请求转发给 Runtime / Decision / Workflow / Tool Gateway
+- 生产访问必须经独立 API Gateway，不允许绕过网关直连生产执行系统
 
 ### 3.3 Runtime Adapter
 
@@ -69,6 +70,8 @@
 3. Runtime Adapter 不直接 import 工具实现
 4. Tool Gateway 不内嵌业务页面逻辑
 5. 写操作默认需要人工确认边界
+6. 前端可通过 nginx 代理访问资金 AI 模块服务，但这不等于前端直连生产机器猫
+7. 任何生产访问路径都应先经过独立 API Gateway，再进入后续执行与数据接入层
 
 ---
 
@@ -112,4 +115,3 @@
 - TODO：补充 Confirmation 生命周期与超时策略
 - TODO：补充 Workflow 与 Confirmation 的衔接约束
 - TODO：在阶段 2 对齐 backend schema / dto / entity 与 frontend types
-

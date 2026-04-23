@@ -1,3 +1,9 @@
+/*
+ * Stage 1 placeholder only.
+ * This file does not represent the final HTTP implementation direction.
+ * A later stage should align this layer with axios singleton + interceptors + layered API encapsulation.
+ */
+
 export interface GatewayHttpRequestOptions {
   path: string
   body?: unknown
@@ -21,4 +27,3 @@ export const gatewayHttpClient: GatewayHttpClient = {
     return notImplemented('gatewayHttpClient.post')
   },
 }
-

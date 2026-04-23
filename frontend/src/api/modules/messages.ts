@@ -1,10 +1,9 @@
 import { listSessionMessages } from './sessions'
-import type { MessageResource } from '../../types/gateway'
+import type { MessageListResource } from '../../types/gateway'
 
 export function getMessagesBySession(
   sessionId: string,
   signal?: AbortSignal,
-): Promise<MessageResource[]> {
+): Promise<MessageListResource> {
   return listSessionMessages(sessionId, signal)
 }
-

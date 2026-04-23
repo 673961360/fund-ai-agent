@@ -30,7 +30,6 @@ class MessageSchema(BaseModel):
 
 
 class MessageListSchema(BaseModel):
-    """Placeholder list response for session messages."""
+    """Placeholder list response for session messages using the `{ items: [...] }` shape."""
 
     items: list[MessageSchema] = Field(default_factory=list)
-

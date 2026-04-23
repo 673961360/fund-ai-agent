@@ -19,6 +19,12 @@
 </template>
 
 <script setup lang="ts">
+/*
+ * Stage 1 structural placeholder only.
+ * Later frontend work must align with docs/frontend/vue3-ruler-skills-compact.md.
+ * Do not introduce real interaction, request, or streaming logic in this stage.
+ */
+
 import type { ConfirmationViewModel } from '../../../../types/confirmation'
 
 interface Props {

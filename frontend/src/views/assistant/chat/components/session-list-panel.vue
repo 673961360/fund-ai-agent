@@ -22,6 +22,12 @@
 </template>
 
 <script setup lang="ts">
+/*
+ * Stage 1 structural placeholder only.
+ * Later frontend work must align with docs/frontend/vue3-ruler-skills-compact.md.
+ * Do not introduce real interaction, request, or streaming logic in this stage.
+ */
+
 import type { ChatSessionListItem } from '../../../../types/chat'
 
 interface Props {
@@ -50,4 +56,3 @@ withDefaults(defineProps<Props>(), {
   margin-bottom: 12px;
 }
 </style>
-
