@@ -29,3 +29,9 @@
 - 代理规则文件尽量稳定，不跟着每轮任务频繁改
 - 运行态文件由 Claude / Codex 按职责持续回写
 - 若当前任务、阶段边界、执行清单发生变化，应先更新运行态文件，再继续执行
+
+## 闭环硬规则
+- Claude 不更新运行态文件，不得交给 Codex 执行
+- current-task 状态不是 approved_for_execution，Codex 不得执行
+- Codex 执行后不回写 review-notes 和 task-status，本轮不算完成
+- 新会话开始时，不得依赖旧聊天结论，必须重新读取真源
