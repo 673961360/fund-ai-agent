@@ -58,6 +58,7 @@
 - 不得把候选路线写成当前实现
 - 不得把目标态写成现状
 - 不得抢跑真实集成
+- 如当前任务包含长期硬决策沉淀，不要把执行细节写进 `docs/decisions/decision-log.md`
 - 如发现文档冲突，先列冲突点，不要直接扩写或重构
 - 若某项改动会反向影响 backend / frontend 占位，必须先说明影响面
 - 只能修改 current-task.md 中“允许修改文件”列出的文件
@@ -125,6 +126,9 @@
 请将执行结果同步回写到：
 - docs/decisions/review-notes.md
 - docs/decisions/task-status.md
+
+如 current-task.md 明确要求，且本轮确实形成了跨轮长期有效的硬决策，可同步更新：
+- docs/decisions/decision-log.md
 
 ## 任务状态要求
 回写 task-status.md 时，必须标注任务状态：

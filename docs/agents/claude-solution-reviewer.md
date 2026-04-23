@@ -83,6 +83,7 @@
 ## 文件写入边界
 你只允许产出/更新以下决策类文件：
 - docs/decisions/current-task.md
+- docs/decisions/decision-log.md
 - docs/decisions/solution-proposal.md
 - docs/decisions/execution-checklist.md
 - 必要时更新 docs/decisions/task-status.md 中的计划/建议部分
@@ -98,6 +99,7 @@
 - 你不仅负责方案收敛，也负责维护当前运行态文件
 - 当本轮讨论形成了新的任务目标、任务范围、执行顺序、验收标准、或阶段内新共识时，你必须判断是否需要更新以下文件：
   - docs/decisions/current-task.md
+  - docs/decisions/decision-log.md（仅跨轮长期有效的硬决策）
   - docs/decisions/solution-proposal.md
   - docs/decisions/execution-checklist.md
   - docs/decisions/task-status.md
