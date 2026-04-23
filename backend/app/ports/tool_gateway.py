@@ -18,6 +18,9 @@ class ToolCallRequest:
     request_id: str | None = None
     trace_id: str | None = None
     confirmation_id: str | None = None
+    workflow_id: str | None = None
+    timeout_ms: int | None = None
+    idempotency_key: str | None = None
 
 
 @dataclass(slots=True)
@@ -57,4 +60,3 @@ class ToolGateway(Protocol):
 
     async def describe_tool(self, tool_name: str) -> dict[str, Any]:
         """Describe a tool placeholder."""
-

@@ -1,13 +1,13 @@
 # 当前任务
 
 ## 任务ID
-TASK-20260423-003
+TASK-20260423-004
 
 ## 任务名称
-阶段2核心对齐 - 代码与契约枚举/命名统一
+阶段2骨架补齐 - HTTP路由骨架 + Mock适配器骨架 + Port字段对齐
 
 ## 任务状态
-done
+review_pending
 
 可选值：
 - planned
@@ -19,18 +19,15 @@ done
 - blocked
 
 ## 任务背景
-阶段2的契约文档（docs/contracts/*.md）已完成详细定义，后端骨架代码和前端类型文件均已到位。但代码中的枚举值、事件命名与契约真源存在3处关键偏差，尚未完成"统一模型对齐"这一阶段2核心目标。
+TASK-20260423-003（阶段2核心对齐）已完成，代码枚举/命名已与契约一致。但经缺口分析，阶段2代码层仍有3处骨架缺失：
 
-具体偏差：
-
-1. **RequestStatus 缺少 `rejected`**：契约定义7个状态（含 rejected），代码只有6个
-2. **ConfirmationStatus 用 `approved` 而非契约中的 `confirmed`**：契约明确写"不再使用 approved，统一改成 confirmed"，且契约不含 `cancelled`
-3. **StreamEvent 事件族命名完全不同**：契约为 `request.accepted / response.delta / response.completed / confirmation.required / request.status.changed / request.terminal`，代码为 `message.delta / message.completed / confirmation.created / request.completed / request.failed / trace.notice`
-
-如果不修复这些偏差，阶段2的"代码-契约对齐"完成标准无法达成，也无法进入阶段3 mock联调。
+1. **HTTP 路由骨架缺失**：契约 Section 5 定义了 10 个端点（sessions ×3 / requests ×3 / confirmations ×4），但 `backend/app/api/http/routes/` 目录为空，无任何路由骨架文件
+2. **WorkflowAdapter Mock 骨架缺失**：port 已定义（ports/workflow_adapter.py），但 `backend/app/adapters/workflow/` 目录不存在
+3. **ToolGateway Mock 骨架缺失**：port 已定义（ports/tool_gateway.py），但 `backend/app/adapters/tool/` 目录不存在
+4. **ToolCallRequest 字段缺失**：契约定义 workflow_id / timeout_ms / idempotency_key，port 代码缺少这3个字段
 
 ## 任务目标
-以契约文档（docs/contracts/*.md）为真源，将后端和前端代码中的枚举值、事件命名统一到契约口径。修改范围仅限枚举值和命名对齐，不涉及业务逻辑实现。
+以契约文档为真源，补齐阶段2允许范围内的骨架文件，使阶段2"最小联调准备"可视为完成，具备进入阶段3 mock联调的条件。
 
 ## 当前阶段
 阶段 2：统一模型、契约对齐、最小联调准备
@@ -39,6 +36,7 @@ done
 当前阶段允许：
 - 统一模型定义、契约对齐
 - 枚举值、命名、状态流转的代码层同步
+- 骨架文件创建（空实现 + NotImplementedError）
 - 不接真实 provider / runtime / workflow / HTTP / SSE
 
 当前阶段不允许：
@@ -47,16 +45,16 @@ done
 - 大规模重构
 
 ## 本轮只做
-- 修复 RequestStatus：加 `rejected`，后端三层（entity → dto → schema）+ 前端 types/gateway.ts 同步
-- 修复 ConfirmationStatus：`approved` → `confirmed`，去掉 `cancelled`，后端三层 + 前端同步
-- 修复 StreamEventType：对齐到契约事件族（request.accepted / response.delta / response.completed / confirmation.required / request.status.changed / request.terminal），后端 schema + 前端同步
-- 同步前端下游引用文件（confirmation.ts、chat.ts）
-- 同步后端下游引用（ApproveConfirmationSchema 命名是否需跟随契约调整）
+- 创建 HTTP 路由骨架文件（sessions.py / requests.py / confirmations.py），所有端点返回 501
+- 更新 routes/__init__.py，导出路由模块并定义 mount_routes 函数
+- 创建 WorkflowAdapter Mock 骨架（adapters/workflow/mock_adapter.py）
+- 创建 ToolGateway Mock 骨架（adapters/tool/mock_gateway.py）
+- 补齐 ToolCallRequest 契约缺失字段（workflow_id / timeout_ms / idempotency_key）
 
 ## 本轮不做
 - 不改业务逻辑实现
 - 不接真实 provider / runtime / workflow / HTTP / SSE
-- 不改 docs/contracts/ 文档（以契约为真源，不反向修改契约）
+- 不改 docs/contracts/ 文档
 - 不改 docs/project/、docs/phases/、docs/demo/
 - 不改 AGENTS.md、CLAUDE.md、README.md 等规则层
 
@@ -67,33 +65,30 @@ done
 - `docs/decisions/current-task.md`
 - `docs/decisions/task-status.md`
 
-## 本轮依赖真源（契约作为对齐标准）
-- `docs/contracts/gateway-http-and-sse.md`（StreamEvent 族、ConfirmationStatus、RequestStatus）
-- `docs/contracts/tool-gateway.md`（ConfirmationStatus 明确声明 "不再使用 approved"）
-- `docs/contracts/runtime-adapter.md`（RuntimeStreamEvent 事件族与 Gateway 保持兼容）
+## 本轮依赖真源（契约作为骨架标准）
+- `docs/contracts/gateway-http-and-sse.md`（Section 5 HTTP 路径定义）
+- `docs/contracts/runtime-adapter.md`（Section 4 方法定义）
+- `docs/contracts/workflow-adapter.md`（Section 3/4 对象与方法定义）
+- `docs/contracts/tool-gateway.md`（Section 3/4 对象与方法定义）
 
 ## 允许修改文件
 
-### 偏差1：RequestStatus 加 `rejected`
-- `backend/app/core/entities/request.py`
-- `backend/app/api/http/schemas/request.py`
-- `backend/app/application/dto/request_dto.py`
-- `frontend/src/types/gateway.ts`
-- `frontend/src/types/chat.ts`（下游引用 RequestStatus）
+### 新增：HTTP 路由骨架
+- `backend/app/api/http/routes/__init__.py`（更新，非覆盖）
+- `backend/app/api/http/routes/sessions.py`
+- `backend/app/api/http/routes/requests.py`
+- `backend/app/api/http/routes/confirmations.py`
 
-### 偏差2：ConfirmationStatus `approved` → `confirmed`，去掉 `cancelled`
-- `backend/app/core/entities/confirmation.py`
-- `backend/app/api/http/schemas/confirmation.py`
-- `backend/app/application/dto/confirmation_dto.py`
-- `frontend/src/types/gateway.ts`
-- `frontend/src/types/confirmation.ts`（下游引用 ConfirmationStatus）
+### 新增：WorkflowAdapter Mock 骨架
+- `backend/app/adapters/workflow/__init__.py`
+- `backend/app/adapters/workflow/mock_adapter.py`
 
-### 偏差3：StreamEventType 对齐契约事件族
-- `backend/app/api/http/schemas/stream_event.py`
-- `frontend/src/types/gateway.ts`
+### 新增：ToolGateway Mock 骨架
+- `backend/app/adapters/tool/__init__.py`
+- `backend/app/adapters/tool/mock_gateway.py`
 
-### 可能涉及的命名调整
-- `backend/app/api/http/schemas/confirmation.py` 中的 `ApproveConfirmationSchema` 是否需跟随改为 `ConfirmConfirmationSchema`（以契约为准，检查契约是否有明确命名要求）
+### 修改：Port 字段对齐
+- `backend/app/ports/tool_gateway.py`（ToolCallRequest 加3个字段）
 
 ### 运行态文件
 - `docs/decisions/current-task.md`
@@ -101,34 +96,35 @@ done
 - `docs/decisions/solution-proposal.md`
 - `docs/decisions/execution-checklist.md`
 - `docs/decisions/review-notes.md`
+- `docs/decisions/decision-log.md`
 
 ## 禁止修改文件
-- `docs/contracts/**`（契约是本轮对齐标准，不反向修改）
+- `docs/contracts/**`
 - `docs/project/**`
 - `docs/phases/**`
 - `docs/demo/**`
-- `AGENTS.md`、`CLAUDE.md`、`README.md`
+- `AGENTS.md`、`CLAUDE.md`、README.md`
 - `docs/agents/*.md`
-- `backend/app/adapters/**`（mock adapter 不在本轮范围）
-- `backend/app/core/ports/**`（ports 不在本轮范围）
-- `backend/app/core/policies/**`（policies 不在本轮范围）
+- `backend/app/adapters/runtime/**`（已有 MockRuntimeAdapter，不改动）
+- `backend/app/core/**`（entity/dto/policy 不在本轮范围）
+- `backend/app/application/**`（dto 不在本轮范围）
 
 ## 前置条件
-- 契约文档（docs/contracts/*.md）已详细定义，可作为对齐标准
-- 后端骨架代码和前端类型文件已全部到位
-- 上一轮文档同步收口任务已完成
+- TASK-20260423-003 已完成，枚举/命名已与契约一致
+- 契约文档已详细定义所有 HTTP 路径、方法签名、数据模型
+- Port 层已定义 Protocol 接口，仅缺 adapter 骨架
 
 ## 执行方式
-Codex 按真源执行允许范围内的枚举/命名修改。
+Codex 按真源执行允许范围内的骨架创建。
 
 ## 完成判定
-- RequestStatus 在后端三层（entity → dto → schema）和前端 types/gateway.ts 中包含 `rejected`，且与契约定义的7个状态完全一致
-- ConfirmationStatus 在后端三层和前端中使用 `confirmed`（不是 `approved`），不包含 `cancelled`，且与契约定义的4个状态完全一致
-- StreamEventType 在后端 schema 和前端 types/gateway.ts 中使用契约事件族命名（request.accepted / response.delta / response.completed / confirmation.required / request.status.changed / request.terminal）
-- 前端下游引用文件（confirmation.ts、chat.ts）已同步更新
-- 全仓不再残留 `approved`、`message.delta`、`message.completed`、`confirmation.created`、`request.completed`、`request.failed`、`trace.notice` 等旧命名（docs/contracts/ 除外）
+- HTTP 路由骨架文件已创建（3个文件），所有端点返回 501
+- routes/__init__.py 已更新，导出路由模块并定义 mount_routes
+- WorkflowAdapter Mock 骨架已创建，所有方法抛 NotImplementedError
+- ToolGateway Mock 骨架已创建，所有方法抛 NotImplementedError
+- ToolCallRequest 已补齐 workflow_id / timeout_ms / idempotency_key
+- Python AST 解析通过（所有新增/修改的 .py 文件）
 - 未越过阶段2边界
-- 未修改业务逻辑实现
 - 运行态文件已回写
 
 ## 输出物要求
@@ -136,24 +132,23 @@ Codex 按真源执行允许范围内的枚举/命名修改。
 - 进度更新：`docs/decisions/task-status.md`
 
 ## 风险提示
-- StreamEventType 改名后，如果有组件或 composable 使用了字符串字面量匹配旧事件名，会形成隐式断裂（需全局搜索确认）
-- ConfirmationStatus 去掉 `cancelled` 后，如果有代码分支处理了 `cancelled` 状态，需同步移除
-- 后端 ApproveConfirmationSchema 类名如果保留 `Approve`，与 `confirmed` 状态可能造成理解混淆
+- 路由骨架文件创建后，如果后续阶段3需要挂载真实逻辑，需要替换 501 占位
+- 适配器骨架的方法签名必须与 port Protocol 完全一致，否则会导致类型检查失败
+- ToolCallRequest 加字段后，如果有现有代码引用了该类，新增字段为 Optional 且带默认值，不会破坏现有调用
 
 ## 验收关注点
-- 三处偏差是否全部修复
-- 后端三层（entity → dto → schema）是否内部一致
-- 前端 types/gateway.ts 是否与后端 schemas 一致
-- 前端下游文件是否同步更新
-- 全仓是否无旧命名残留
-- 是否未越阶段2边界
+- 骨架文件是否存在且可被 Python 解析
+- 所有新增方法是否均抛 NotImplementedError
+- HTTP 路由路径是否与契约 Section 5 完全一致
+- ToolCallRequest 字段是否与契约 Section 3.1 完全一致
+- 是否未越过阶段2边界
 
 ## 交接说明
-- 本轮由 Codex 按真源执行枚举/命名对齐
+- 本轮由 Codex 按真源执行骨架创建
 - 执行完成后由 Claude 或人工复核
-- 复核通过后，阶段2"代码-契约对齐"可视为完成，准备进入阶段3 mock联调
+- 复核通过后，阶段2"骨架补齐"可视为完成，具备进入阶段3 mock联调条件
 
 ## 最近一次更新
 - 更新时间：2026-04-23
 - 更新人：Codex
-- 更新说明：已完成允许范围内的枚举/命名代码对齐，进入复核状态
+- 更新说明：已完成 TASK-004 允许范围内的骨架创建与字段对齐，进入复核状态

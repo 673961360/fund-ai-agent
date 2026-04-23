@@ -1,158 +1,89 @@
 # 方案提议
 
 ## 任务ID
-TASK-20260423-003
+TASK-20260423-004
 
 ## 任务名称
-阶段2核心对齐 - 代码与契约枚举/命名统一
+阶段2骨架补齐 - HTTP路由骨架 + Mock适配器骨架 + Port字段对齐
 
 ## 本次任务理解
-阶段2的契约文档已详细落盘，后端骨架和前端类型均已到位。但代码中的枚举值和事件命名与契约真源存在3处关键偏差。本轮目标是修复这些偏差，完成"代码-契约对齐"。
+TASK-003 已完成枚举/命名对齐，但阶段2代码层仍有3处骨架缺口。本轮目标是补齐这些骨架，使阶段2"最小联调准备"可视为完成。
 
 ## 当前真源是否足够
 足够。
 
 原因：
-- 契约文档（docs/contracts/*.md）已详细定义了所有枚举值和事件族
-- 后端三层（entity → dto → schema）和前端 types/gateway.ts 均可读取当前值
-- 下游引用文件已通过搜索完整识别
+- 契约文档已详细定义 HTTP 路径（gateway-http-and-sse.md Section 5）、方法签名（runtime-adapter.md Section 4、workflow-adapter.md Section 4、tool-gateway.md Section 4）和数据模型
+- Port 层已定义 Protocol 接口，可直接作为骨架实现依据
+- 现有 MockRuntimeAdapter 可作为适配器骨架模式的参考
 
-## 冲突点 / 缺失点 / 风险点
+## 缺口清单
 
-### 偏差1：RequestStatus 缺少 `rejected`
+### 缺口1：HTTP 路由骨架缺失
+**契约定义**（gateway-http-and-sse.md Section 5）：
+10 个端点：
+- Sessions ×3：GET /sessions、GET /sessions/{id}、GET /sessions/{id}/messages
+- Requests ×3：POST /requests、GET /requests/{id}、GET /requests/{id}/events
+- Confirmations ×4：GET /confirmations/{id}、POST /confirmations/{id}/approve、POST /confirmations/{id}/reject、POST /confirmations
 
-**契约定义**（gateway-http-and-sse.md）：
-7个状态：`accepted | streaming | waiting_confirmation | completed | failed | cancelled | rejected`
+**代码实际**：`routes/` 目录为空，仅 __init__.py 存在但为占位
 
-**代码实际**：6个状态，无 `rejected`
+### 缺口2：WorkflowAdapter Mock 骨架缺失
+**契约定义**（workflow-adapter.md Section 4）：
+4 个方法：start / resume / cancel / get_status
 
-影响文件：
-- `backend/app/core/entities/request.py`（entity 层）
-- `backend/app/api/http/schemas/request.py`（schema 层）
-- `backend/app/application/dto/request_dto.py`（dto 层）
-- `frontend/src/types/gateway.ts`
-- `frontend/src/types/chat.ts`（下游引用 RequestStatus）
+**代码实际**：port 已定义（ports/workflow_adapter.py），但 adapters/workflow/ 目录不存在
 
-### 偏差2：ConfirmationStatus `approved` → `confirmed`
+### 缺口3：ToolGateway Mock 骨架缺失
+**契约定义**（tool-gateway.md Section 4）：
+4 个方法：validate / authorize / execute / describe_tool
 
-**契约定义**（gateway-http-and-sse.md、tool-gateway.md）：
-4个状态：`pending | confirmed | rejected | expired`
-tool-gateway.md 第97行明确声明："不再使用 approved，统一改成 confirmed"
+**代码实际**：port 已定义（ports/tool_gateway.py），但 adapters/tool/ 目录不存在
 
-**代码实际**：5个状态，含 `approved` 和 `cancelled`，不含 `confirmed`
+### 缺口4：ToolCallRequest 字段缺失
+**契约定义**（tool-gateway.md Section 3.1）：
+10 个字段，含 workflow_id / timeout_ms / idempotency_key
 
-影响文件：
-- `backend/app/core/entities/confirmation.py`（entity 层）
-- `backend/app/api/http/schemas/confirmation.py`（schema 层）
-- `backend/app/application/dto/confirmation_dto.py`（dto 层）
-- `frontend/src/types/gateway.ts`
-- `frontend/src/types/confirmation.ts`（下游引用 ConfirmationStatus）
-
-附加考虑：
-- `backend/app/api/http/schemas/confirmation.py` 中 `ApproveConfirmationSchema` 类名是否需改为 `ConfirmConfirmationSchema`（待确认契约是否有明确类名要求）
-- `frontend/src/types/confirmation.ts` 中 `action: 'approve' | 'reject'` 是否需改为 `'confirm' | 'reject'`
-- `frontend/src/types/gateway.ts` 中 `ApproveConfirmationPayload` 类型名是否需改
-
-### 偏差3：StreamEventType 事件族命名完全不同
-
-**契约定义**（gateway-http-and-sse.md）：
-6个事件类型：
-- `request.accepted`
-- `response.delta`
-- `response.completed`
-- `confirmation.required`
-- `request.status.changed`
-- `request.terminal`
-
-**代码实际**（stream_event.py、gateway.ts）：
-6个事件类型，但命名完全不同：
-- `message.delta` → 应为 `response.delta`
-- `message.completed` → 应为 `response.completed`
-- `confirmation.created` → 应为 `confirmation.required`
-- `request.completed` → 应为 `request.terminal`（语义也不同）
-- `request.failed` → 应为 `request.terminal`（terminal 包含 failed）
-- `trace.notice` → 契约中无对应
-
-影响文件：
-- `backend/app/api/http/schemas/stream_event.py`
-- `frontend/src/types/gateway.ts`
-
-注意：契约的 `request.terminal` 是一个统一终态事件，`terminal_status` 字段为 `completed | failed | cancelled | rejected`，而代码中的 `request.completed` 和 `request.failed` 是分开的两个事件。这里不仅是命名差异，语义模型也有差异。本轮以契约为准。
+**代码实际**（ports/tool_gateway.py）：仅 7 个字段，缺少上述 3 个
 
 ## 推荐方案
-采用"逐一偏差修复 + 全局残留检查"的方案：
-
-1. **偏差1**：在3个后端文件和2个前端文件中加入 `rejected`，使 RequestStatus 与契约一致
-2. **偏差2**：在3个后端文件和2个前端文件中将 `approved` 改为 `confirmed`，去掉 `cancelled`
-3. **偏差3**：在后端 stream_event.py 和前端 gateway.ts 中将事件族全部替换为契约命名
-4. 同步更新下游引用文件（confirmation.ts、chat.ts 中的类型引用无需改值，但需确认无隐式依赖旧值）
-5. 全局搜索确认无旧命名残留
+采用"骨架补齐"方案：所有新增文件均为空骨架 + NotImplementedError，不写业务逻辑。
 
 ## 精确执行步骤
 
-### 步骤1：修复 RequestStatus
-1. `backend/app/core/entities/request.py` — 加 `REJECTED = "rejected"`
-2. `backend/app/api/http/schemas/request.py` — 加 `REJECTED = "rejected"`
-3. `backend/app/application/dto/request_dto.py` — Literal 中加 `"rejected"`
-4. `frontend/src/types/gateway.ts` — RequestStatus 加 `| 'rejected'`
+### 步骤1：创建 HTTP 路由骨架
+1. `backend/app/api/http/routes/sessions.py` — 3个端点，全部 501
+2. `backend/app/api/http/routes/requests.py` — 3个端点，全部 501
+3. `backend/app/api/http/routes/confirmations.py` — 4个端点，全部 501
+4. 更新 `backend/app/api/http/routes/__init__.py` — 导出模块 + mount_routes
 
-### 步骤2：修复 ConfirmationStatus
-1. `backend/app/core/entities/confirmation.py` — `APPROVED = "approved"` → `CONFIRMED = "confirmed"`，去掉 `CANCELLED = "cancelled"`
-2. `backend/app/api/http/schemas/confirmation.py` — 同步，`APPROVED` → `CONFIRMED`，去掉 `CANCELLED`
-3. `backend/app/application/dto/confirmation_dto.py` — Literal 中 `"approved"` → `"confirmed"`，去掉 `"cancelled"`
-4. `frontend/src/types/gateway.ts` — ConfirmationStatus 改为 `'pending' | 'confirmed' | 'rejected' | 'expired'`
+### 步骤2：创建 WorkflowAdapter Mock 骨架
+1. `backend/app/adapters/workflow/__init__.py` — 空占位
+2. `backend/app/adapters/workflow/mock_adapter.py` — MockWorkflowAdapter 类
 
-### 步骤3：修复 StreamEventType
-1. `backend/app/api/http/schemas/stream_event.py` — 替换全部6个枚举值：
-   - `MESSAGE_DELTA` → `REQUEST_ACCEPTED = "request.accepted"`
-   - `MESSAGE_COMPLETED` → `RESPONSE_DELTA = "response.delta"`（注意不是一一对应）
-   - `CONFIRMATION_CREATED` → `RESPONSE_COMPLETED = "response.completed"`
-   - `REQUEST_COMPLETED` → `CONFIRMATION_REQUIRED = "confirmation.required"`
-   - `REQUEST_FAILED` → `REQUEST_STATUS_CHANGED = "request.status.changed"`
-   - `TRACE_NOTICE` → `REQUEST_TERMINAL = "request.terminal"`
-2. `frontend/src/types/gateway.ts` — StreamEventType 替换为契约的6个值
+### 步骤3：创建 ToolGateway Mock 骨架
+1. `backend/app/adapters/tool/__init__.py` — 空占位
+2. `backend/app/adapters/tool/mock_gateway.py` — MockToolGateway 类
 
-### 步骤4：检查下游引用
-1. `frontend/src/types/confirmation.ts` — 检查 `action: 'approve' | 'reject'` 是否需改为 `'confirm' | 'reject'`
-2. `frontend/src/types/chat.ts` — 确认 RequestStatus 引用无隐式依赖旧值
-3. `backend/app/api/http/schemas/confirmation.py` — 检查 `ApproveConfirmationSchema` 是否需重命名
+### 步骤4：对齐 ToolCallRequest 字段
+1. `backend/app/ports/tool_gateway.py` — 加 workflow_id / timeout_ms / idempotency_key
 
-### 步骤5：全局残留检查
-全仓搜索以下旧命名，确认除 docs/contracts/ 外无残留：
-- `approved`（Confirmation 上下文中）
-- `message.delta`
-- `message.completed`
-- `confirmation.created`
-- `trace.notice`
+### 步骤5：Python AST 验证
+对所有新增/修改的 .py 文件执行 AST 解析
 
-## 需要 Codex 修改的文件清单
-- `backend/app/core/entities/request.py`
-- `backend/app/core/entities/confirmation.py`
-- `backend/app/api/http/schemas/request.py`
-- `backend/app/api/http/schemas/confirmation.py`
-- `backend/app/api/http/schemas/stream_event.py`
-- `backend/app/application/dto/request_dto.py`
-- `backend/app/application/dto/confirmation_dto.py`
-- `frontend/src/types/gateway.ts`
-- `frontend/src/types/confirmation.ts`
-- `frontend/src/types/chat.ts`（确认无隐式依赖）
+### 步骤6：全局残留检查
+确认无阶段越界内容，无真实集成代码
 
 ## 不该做的事情
-- 不改 docs/contracts/ 文档（契约是标准，不反向修改）
+- 不改 docs/contracts/ 文档
 - 不改业务逻辑实现
 - 不接真实 provider / runtime / workflow / HTTP / SSE
-- 不改规则层文件（AGENTS.md、CLAUDE.md、README.md）
-- 不改 ports / policies / adapters
+- 不改规则层文件
 
 ## 验收标准
-- RequestStatus 在后端三层和前端中与契约完全一致（7个状态）
-- ConfirmationStatus 在后端三层和前端中与契约完全一致（4个状态，使用 confirmed）
-- StreamEventType 在后端 schema 和前端中与契约完全一致（6个事件类型）
-- 全仓搜索无旧命名残留（docs/contracts/ 除外）：
-  - 无 `approved`（Confirmation 上下文）
-  - 无 `message.delta`、`message.completed`
-  - 无 `confirmation.created`
-  - 无 `request.completed`、`request.failed`（作为 StreamEventType）
-  - 无 `trace.notice`
-- 前端下游文件已同步
+- HTTP 路由骨架文件可被 Python 解析
+- 所有新增方法均抛 NotImplementedError
+- HTTP 路由路径与契约 Section 5 完全一致
+- ToolCallRequest 字段与契约 Section 3.1 完全一致
+- Python AST 解析通过
 - 未越过阶段2边界
