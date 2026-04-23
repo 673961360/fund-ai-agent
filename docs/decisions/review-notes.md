@@ -240,6 +240,111 @@
 - 未发现需要阻塞执行的新增冲突。
 - 建议进入 Claude 或人工复核；复核通过后可将 TASK-20260423-004 收口为 done。
 
+---
+
+## TASK-20260423-004 Claude 复核记录
+
+- 复核时间：2026-04-23
+- 复核人：Claude
+- 复核结果：**通过**，收口为 done
+
+### 逐项验证
+
+| 验收项 | 验证方式 | 结果 |
+|--------|---------|------|
+| HTTP 路由 10 端点 | 读 sessions.py / requests.py / confirmations.py | sessions×3 / requests×3 / confirmations×4 全部覆盖 |
+| routes/__init__.py | 读文件 | 已导出 3 模块 + mount_routes(app) |
+| WorkflowAdapter Mock | 读 mock_adapter.py | 4 方法均抛 NotImplementedError，签名一致 |
+| ToolGateway Mock | 读 mock_gateway.py | 4 方法均抛 NotImplementedError，签名一致 |
+| 适配器 __init__.py | Glob 检查 | workflow/ 和 tool/ 均存在 |
+| ToolCallRequest 字段 | 读 tool_gateway.py | workflow_id / timeout_ms / idempotency_key 已补齐 |
+
+### 边界检查
+- 未越过阶段2边界 ✅
+- 未引入真实集成 ✅
+- 未修改业务逻辑 ✅
+
+---
+
+## TASK-20260423-004 收口记录
+
+- 收口时间：2026-04-23
+- 收口操作：Claude 读取真源后确认 TASK-004 全部执行步骤已完成，将 task-status 从 review_pending 同步为 done
+- 收口状态：done
+- 收口结论：HTTP 路由骨架 10 端点覆盖、MockWorkflowAdapter / MockToolGateway 骨架已创建、ToolCallRequest 字段对齐、Python AST 解析通过
+
+---
+
+## TASK-20260423-005 启动记录
+
+- 启动时间：2026-04-23
+- 启动人：Claude
+- 启动方式：TASK-004 收口后判断 M2 已全部退出，启动 M3 进入评估
+- 任务目标：M2 收口确认 + M3 进入评估结论落盘 + 如需进入发布 M3 首个任务方案
+
+### M2 退出条件核对
+
+| # | 退出条件 | 状态 |
+|---|---------|------|
+| 1 | 五类核心资源统一模型代码与契约对齐 | ✅ TASK-003 |
+| 2 | 状态枚举与流转文档已补齐 | ✅ 契约文档 |
+| 3 | Tool Gateway 契约已细化 | ✅ tool-gateway.md |
+| 4 | Workflow Adapter 契约已细化 | ✅ workflow-adapter.md |
+| 5 | 最小闭环联调路径已定义清楚 | ✅ stage-2-minimal-loop-definition.md |
+| 6 | HTTP 路由骨架 10 端点已创建 | ✅ TASK-004 |
+| 7 | MockRuntimeAdapter / MockWorkflowAdapter / MockToolGateway 骨架已创建 | ✅ TASK-003/004 |
+| 8 | 未引入真实集成 | ✅ 代码审查确认 |
+
+M2 **全部满足**，可视为退出。
+
+### M3 进入条件评估
+
+| 条件 | 当前状态 | 缺口 |
+|------|---------|------|
+| M2 已全部退出 | ✅ | 无 |
+| MockRuntimeAdapter 可接收请求并返回占位流事件 | 仅抛 NotImplementedError | 需实现最小 mock 逻辑 |
+| 前端可发起请求并收到 SSE 占位响应 | HTTP 路由为 501 | 需实现 mock SSE handler |
+| Request 状态可从 accepted 流转至 terminal | 无状态机 | 需最小状态推进逻辑 |
+| Confirmation 占位链路可工作 | 仅 schema | 需最小 mock 逻辑 |
+| 端到端演示可在本机完成 | 无 | 需全链路 mock 串联 |
+
+### 待执行
+- 收敛 M3 首个任务方案（MockRuntimeAdapter 最小 mock 逻辑 + SSE handler + 状态推进）
+
+---
+
+## TASK-20260423-006 启动记录
+
+- 启动时间：2026-04-23
+- 启动人：Claude
+- 启动方式：TASK-005 收口后探查项目状态，识别基础设施缺口，收敛为 TASK-006
+- 任务目标：补齐依赖管理与应用入口，实现 MockRuntimeAdapter 最小 mock 逻辑，打通无确认路径
+
+### 缺口清单（启动时已确认）
+
+1. **后端依赖与入口缺失**
+   - 无 pyproject.toml / requirements.txt / main.py
+   - 无法启动服务
+   - 影响：需新增 3 个文件（pyproject.toml + main.py + README.md）
+
+2. **MockRuntimeAdapter 仅为 NotImplementedError**
+   - submit / stream / cancel / describe_capabilities 全部抛错
+   - 无法产生任何事件流
+   - 影响：需实现最小 mock 逻辑（submit 返回受理结果，stream 产生 4 类事件）
+
+3. **HTTP 路由全部返回 501**
+   - POST /requests 无实际处理逻辑
+   - GET /requests/{id}/events 无法返回 SSE
+   - 影响：需实现 requests.py 的 2 个核心端点
+
+4. **前端 API 客户端抛错误**
+   - GatewayHttpClient.get()/post() 直接抛 TODO(stage-2)
+   - 前端无法发出任何真实请求
+   - 影响：需改为真实 fetch 请求
+
+### 待执行
+- 等待人工确认后交 Codex 执行
+
 ## 最近一次更新
 - 更新时间：2026-04-23
 - 更新人：Codex

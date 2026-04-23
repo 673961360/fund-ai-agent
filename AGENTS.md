@@ -31,6 +31,11 @@
 
 - `docs/phases/stage-2-deliverables.md`
 
+项目总体推进节奏与版本发布口径以以下文件为准：
+
+- `docs/project/milestones.md`
+- `docs/project/release-plan.md`
+
 阶段 1 仅保留为历史基线：
 
 - `docs/phases/stage-1-deliverables.md`

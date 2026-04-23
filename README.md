@@ -14,6 +14,7 @@
 - 运行态、执行记录与长期决策：`docs/decisions/solution-proposal.md`、`docs/decisions/execution-checklist.md`、`docs/decisions/review-notes.md`、`docs/decisions/decision-log.md`
 - 代理入口：`CLAUDE.md`、`docs/agents/claude-solution-reviewer.md`、`docs/agents/codex-executor.md`
 - 全局背景与阶段基线：`docs/project/*.md`、`docs/demo/*.md`、`docs/phases/stage-1-deliverables.md`
+- 里程碑与发布计划：`docs/project/milestones.md`、`docs/project/release-plan.md`
 
 ## 协作方式
 

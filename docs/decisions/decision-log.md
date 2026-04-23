@@ -54,3 +54,21 @@
 - 决策：阶段2"最小联调准备"要求 HTTP 路由骨架（10个端点）、WorkflowAdapter Mock 骨架、ToolGateway Mock 骨架、Port 模型字段全部补齐，全部为空实现 + NotImplementedError，不接真实集成
 - 影响：骨架补齐后阶段2可视为完成，具备进入阶段3 mock联调条件
 - 来源：TASK-20260423-004 方案
+
+### DEC-20260423-009 里程碑与发布计划层建立
+- 状态：active
+- 决策：建立 `docs/project/milestones.md`（4个里程碑 M1-M4）和 `docs/project/release-plan.md`（v0-internal-demo 发布口径），作为项目目标层与阶段层之间的中间层
+- 影响：后续推进需以 milestones.md 回答"当前在哪个里程碑、离可发还有多远"；发布判断以 release-plan.md 的 Go-NoGo 条件为准，里程碑完成不等于版本可发布
+- 来源：本轮文档补强任务
+
+### DEC-20260423-010 M2 已退出，下一方向为 M3 最小闭环跑通
+- 状态：active
+- 决策：M2 退出条件全部满足（8/8），可视为退出。下一方向为 M3（Stage 3），使用 MockRuntimeAdapter 打通最小可演示链路，不依赖任何外部服务
+- 影响：后续任务以 M3 退出条件为准（MockRuntimeAdapter 可接收请求并返回占位流事件、前端可发起请求并收到 SSE 占位响应、Request 状态可从 accepted 流转至 terminal）
+- 来源：TASK-20260423-005 M2 收口 + M3 进入评估
+
+### DEC-20260423-011 M3 最小闭环执行策略
+- 状态：active
+- 决策：M3 首个任务需先补齐基础设施（pyproject.toml + main.py + CORS），再实现 MockRuntimeAdapter 最小 mock 逻辑（submit + stream），最后实现 SSE handler。前端 API 客户端从抛错误改为真实 fetch。事件顺序严格按契约无确认路径：request.accepted → response.delta* → response.completed → request.terminal
+- 影响：TASK-006 为 M3 首个执行任务，完成后 M3 方可视为启动
+- 来源：TASK-20260423-006 方案
