@@ -1,71 +1,149 @@
 # 评审记录
 
 ## 当前任务
-- 任务ID：TASK-20260423-002
-- 任务名称：工作模式优化第一轮 - 同步收口版
+- 任务ID：TASK-20260423-003
+- 任务名称：阶段2核心对齐 - 代码与契约枚举/命名统一
 
-## 本轮目标
-先修正运行态真源不同步，再建立 `decision-log.md`，最后判断 `next-task-draft.md` 是否现在应启用；对规则文件只做必要微调。
+---
 
-## 本轮改动摘要
-- 已将 `current-task.md`、`solution-proposal.md`、`execution-checklist.md` 同步到当前真实任务
-- 已将 `task-status.md`、`review-notes.md` 同步为同一口径
-- 已新增 `docs/decisions/decision-log.md`，用于沉淀跨轮长期有效的硬决策
-- 已对 `AGENTS.md`、`CLAUDE.md`、`README.md`、`docs/agents/*.md` 做必要微调，登记 `decision-log.md` 的存在和维护责任
+## TASK-20260423-002 收口记录
 
-## 已立即落地的优化
-- 运行态真源同步
-- `decision-log.md` 初始化
-- 规则文件必要微调
+- 收口时间：2026-04-23
+- 收口操作：Claude 读取真源后确认上一轮全部执行步骤已完成，将 task-status 从 review_pending 同步为 done
+- 收口状态：done
+- 收口结论：运行态真源已同步、decision-log.md 已建立、next-task-draft 判断结论已落盘
 
-## 暂不启用 / 延后项
-- `docs/decisions/next-task-draft.md` 暂不启用
-- 原因：当前最优先问题是修正已有真源不同步；在当前任务真源刚恢复同步时，再新增一个草案文件会扩大维护面
-- 启用时机：当当前任务真源已连续多轮稳定维护，且需要在不改写 `current-task.md` 的前提下沉淀下一轮草案时
-- 启用条件：
-  1. `current-task.md`、`solution-proposal.md`、`execution-checklist.md` 已连续 2 轮以上保持同步
-  2. 同时存在两个以上待选择的下一轮候选，或当前任务与下一轮草案再次发生混写
+---
 
-## 影响面
-影响范围仅限以下文档：
+## TASK-20260423-003 启动记录
 
-- `AGENTS.md`
-- `CLAUDE.md`
-- `README.md`
-- `docs/agents/claude-solution-reviewer.md`
-- `docs/agents/codex-executor.md`
+- 启动时间：2026-04-23
+- 启动人：Claude
+- 启动方式：读取真源后识别阶段2核心缺口，收敛为 TASK-003
+- 任务目标：修复3处代码-契约枚举/命名偏差，完成阶段2"统一模型对齐"
+
+### 偏差清单（启动时已确认）
+
+1. **RequestStatus 缺少 `rejected`**
+   - 契约：7个状态（含 rejected）
+   - 代码：6个状态（无 rejected）
+   - 影响：后端3个文件 + 前端2个文件
+
+2. **ConfirmationStatus 用 `approved` 而非 `confirmed`**
+   - 契约：4个状态 `pending | confirmed | rejected | expired`，明确声明"不再使用 approved"
+   - 代码：5个状态，含 `approved` 和 `cancelled`，不含 `confirmed`
+   - 影响：后端3个文件 + 前端2个文件
+
+3. **StreamEventType 事件族命名完全不同**
+   - 契约：`request.accepted / response.delta / response.completed / confirmation.required / request.status.changed / request.terminal`
+   - 代码：`message.delta / message.completed / confirmation.created / request.completed / request.failed / trace.notice`
+   - 影响：后端1个文件 + 前端1个文件
+
+### 待执行
+- 等待人工确认后交 Codex 执行
+
+---
+
+## TASK-20260423-003 Codex 执行记录
+
+- 执行时间：2026-04-23
+- 执行人：Codex
+- 执行状态：review_pending
+- 执行结论：已按契约真源完成后端/前端枚举与事件命名对齐，未引入真实 provider / runtime / workflow / HTTP / SSE / tool 调用链实现。
+
+### 本次改动摘要
+
+1. RequestStatus 对齐：
+   - 后端 entity / schema / dto 均补齐 `rejected`
+   - 前端 `frontend/src/types/gateway.ts` 补齐 `rejected`
+
+2. ConfirmationStatus 对齐：
+   - 后端 entity / schema / dto 均改为 `pending | confirmed | rejected | expired`
+   - 前端 `frontend/src/types/gateway.ts` 同步改为 `pending | confirmed | rejected | expired`
+   - 已移除 Confirmation 上下文中的旧 `approved` 和 `cancelled`
+
+3. StreamEventType 对齐：
+   - 后端 `backend/app/api/http/schemas/stream_event.py` 改为契约事件族
+   - 前端 `frontend/src/types/gateway.ts` 同步改为契约事件族
+
+### 受影响文件
+
+- `backend/app/core/entities/request.py`
+- `backend/app/api/http/schemas/request.py`
+- `backend/app/application/dto/request_dto.py`
+- `backend/app/core/entities/confirmation.py`
+- `backend/app/api/http/schemas/confirmation.py`
+- `backend/app/application/dto/confirmation_dto.py`
+- `backend/app/api/http/schemas/stream_event.py`
+- `frontend/src/types/gateway.ts`
 - `docs/decisions/current-task.md`
-- `docs/decisions/task-status.md`
-- `docs/decisions/solution-proposal.md`
 - `docs/decisions/execution-checklist.md`
 - `docs/decisions/review-notes.md`
-- `docs/decisions/decision-log.md`
+- `docs/decisions/task-status.md`
 
-未涉及 backend / frontend / contracts / project / phases 实现修改。
+### 下游引用检查
 
-## 当前真源是否仍一致
-- 一致。`current-task.md`、`solution-proposal.md`、`execution-checklist.md`、`task-status.md` 已同步到同一任务口径
-- 一致。`AGENTS.md`、`CLAUDE.md`、`README.md` 与 `docs/phases/stage-2-deliverables.md` 仍保持阶段 2 边界一致
-- 一致。`decision-log.md` 只记录长期有效硬决策，没有混入执行细节
+- `frontend/src/types/confirmation.ts`：仅透传 `ConfirmationStatus` 类型，未发现旧状态字面量分支，无需改动。
+- `frontend/src/types/chat.ts`：仅透传 `RequestStatus` 类型，未发现旧状态字面量分支，无需改动。
+- `ApproveConfirmationSchema` / `ApproveConfirmationPayload`：保留动作命名不变。原因是契约仍保留 `POST /confirmations/{id}/approve` 路径，本轮只调整状态值，不反向改接口动作名。
 
-## 是否引入新冲突
-- 未发现新的结构性冲突
-- 本轮显式避免了“当前任务”和“下一轮草案”混写，也未硬启用 `next-task-draft.md`
+### 验证结果
 
-## 仍未实现 / 未落地内容
-- `docs/decisions/next-task-draft.md` 未创建，这是本轮明确的延后结论，不是遗漏
-- 下一轮正式业务 / contracts / skeleton 任务尚未创建
+- `backend/frontend` 旧命名搜索：0 个代码匹配。
+- Confirmation 相关文件旧状态搜索：0 个代码匹配。
+- `python` AST 解析：通过，已解析 21 个后端 Python 文件。
+- `git diff --check`：通过；仅输出 Git 对 LF/CRLF 的换行提示，无 whitespace error。
+- 项目根目录未发现 `package.json`、`pyproject.toml`、`requirements*.txt`，因此未运行前端 typecheck、后端 test/lint 等项目级命令。
 
-## 相关历史
-- `TASK-20260423-001`：完成了运行态决策文件的最小初始化
-- 2026-04-23 规则文件瘦身第一轮：完成 `AGENTS.md`、`CLAUDE.md`、`README.md` 原地瘦身，但未同步更新 `current-task.md`、`solution-proposal.md`、`execution-checklist.md`
+### 残留说明
 
-## 下一步建议
-1. 先由人工复核本轮“同步收口版”文档修改
-2. 若通过，再创建下一轮正式 current-task，而不是继续沿用本轮任务单
-3. 下一轮若再次出现“当前任务 / 下一轮草案”互相污染，再评估正式启用 `next-task-draft.md`
+全仓排除 `docs/contracts/` 后，仍可在 `docs/decisions/*`、`docs/agents/*`、`docs/templates/*` 中搜索到旧词或 `approved_for_execution` 这类任务状态名。经核对，这些属于运行态任务描述、方案历史、模板或协作状态名，不是后端/前端代码枚举残留。
+
+### 当前判断
+
+- 当前阶段真源仍一致。
+- 未发现阶段越界。
+- 未发现需要阻塞执行的新增冲突。
+- 建议进入 Claude 或人工复核；复核通过后可将 TASK-20260423-003 收口为 done。
+
+---
+
+## TASK-20260423-003 Claude 复核记录
+
+- 复核时间：2026-04-23
+- 复核人：Claude
+- 复核结果：**通过**，收口为 done
+
+### 逐项验证
+
+| 偏差 | 验证方式 | 结果 |
+|------|---------|------|
+| RequestStatus +rejected | 读 entity/schema/dto/gateway.ts | 后端三层 + 前端均为 7 个状态 |
+| ConfirmationStatus confirmed | 读 entity/schema/dto/gateway.ts | 后端三层 + 前端均为 4 个状态，无 approved/cancelled |
+| StreamEventType 事件族 | 读 stream_event.py + gateway.ts | 后端 schema + 前端均为 6 个契约事件族命名 |
+
+### 全局残留搜索（代码层）
+
+| 搜索词 | 后端匹配数 | 前端匹配数 |
+|--------|-----------|-----------|
+| approved | 0 | 0 |
+| message.delta / message.completed | 0 | 0 |
+| confirmation.created | 0 | 0 |
+| trace.notice | 0 | 0 |
+
+### 下游引用检查
+- confirmation.ts：仅透传类型，无旧值分支 ✅
+- chat.ts：仅透传类型，无旧值分支 ✅
+- ApproveConfirmationSchema：保留动作名，契约仍保留 /approve 路径 ✅
+
+### 边界检查
+- 未越过阶段2边界 ✅
+- 未引入真实集成 ✅
+- 未修改业务逻辑 ✅
+
+---
 
 ## 最近一次更新
 - 更新时间：2026-04-23
-- 更新人：Codex
-- 更新说明：完成工作模式优化第一轮的运行态同步、decision-log 初始化与 next-task-draft 暂不启用判断
+- 更新人：Claude
+- 更新说明：TASK-002 收口 + TASK-003 执行记录 + Claude 复核通过

@@ -1,81 +1,97 @@
 # 执行清单
 
 ## 任务ID
-TASK-20260423-002
+TASK-20260423-003
 
 ## 任务名称
-工作模式优化第一轮 - 同步收口版
+阶段2核心对齐 - 代码与契约枚举/命名统一
 
 ## 执行前检查
 - [x] 已阅读 `AGENTS.md`
-- [x] 已阅读 `CLAUDE.md`
-- [x] 已阅读 `README.md`
-- [x] 已阅读 `docs/agents/claude-solution-reviewer.md`
-- [x] 已阅读 `docs/agents/codex-executor.md`
-- [x] 已阅读 `docs/templates/current-task.template.md`
-- [x] 已阅读 `docs/decisions/current-task.md`
-- [x] 已阅读 `docs/decisions/task-status.md`
-- [x] 已阅读 `docs/decisions/solution-proposal.md`
-- [x] 已阅读 `docs/decisions/execution-checklist.md`
-- [x] 已阅读 `docs/decisions/review-notes.md`
 - [x] 已阅读 `docs/phases/stage-2-deliverables.md`
-- [x] 已确认本轮优先修正运行态真源不同步
-- [x] 已确认本轮只做文档层优化，不进入真实实现
+- [x] 已阅读 `docs/decisions/current-task.md`
+- [x] 已阅读 `docs/decisions/solution-proposal.md`
+- [x] 已阅读 `docs/contracts/gateway-http-and-sse.md`（对齐标准）
+- [x] 已阅读 `docs/contracts/tool-gateway.md`（ConfirmationStatus 声明）
+- [x] 已阅读 `docs/contracts/runtime-adapter.md`（RuntimeStreamEvent 事件族）
+- [x] 已阅读本轮涉及的所有后端和前端文件
 
 ## 本轮允许修改文件
-- [x] `AGENTS.md`
-- [x] `CLAUDE.md`
-- [x] `README.md`
-- [x] `docs/agents/claude-solution-reviewer.md`
-- [x] `docs/agents/codex-executor.md`
-- [x] `docs/decisions/current-task.md`
-- [x] `docs/decisions/task-status.md`
-- [x] `docs/decisions/solution-proposal.md`
-- [x] `docs/decisions/execution-checklist.md`
-- [x] `docs/decisions/review-notes.md`
-- [x] `docs/decisions/decision-log.md`
+- [x] `backend/app/core/entities/request.py`
+- [x] `backend/app/core/entities/confirmation.py`
+- [x] `backend/app/api/http/schemas/request.py`
+- [x] `backend/app/api/http/schemas/confirmation.py`
+- [x] `backend/app/api/http/schemas/stream_event.py`
+- [x] `backend/app/application/dto/request_dto.py`
+- [x] `backend/app/application/dto/confirmation_dto.py`
+- [x] `frontend/src/types/gateway.ts`
+- [x] `frontend/src/types/confirmation.ts`（已检查，无需修改）
+- [x] `frontend/src/types/chat.ts`（已检查，无需修改）
 
-## 本轮执行步骤
-- [x] 将 `current-task.md` 同步为“工作模式优化第一轮 - 同步收口版”
-- [x] 将 `solution-proposal.md` 同步到本轮真实任务与判断结论
-- [x] 将 `execution-checklist.md` 同步到本轮真实执行步骤
-- [x] 将 `task-status.md` 与 `review-notes.md` 同步为同一口径
-- [x] 新增 `docs/decisions/decision-log.md`
-- [x] 初始化当前有效硬决策
-- [x] 评估 `next-task-draft.md` 是否应立即启用
-- [x] 明确记录“暂不启用”的原因、启用时机与启用条件
-- [x] 对规则文件做必要微调，不重复大幅瘦身
-- [x] 自检未越过阶段 2 边界，且未把当前任务与下一轮草案混写
+## 步骤1：修复 RequestStatus — 加 `rejected`
+- [x] `backend/app/core/entities/request.py` — 加 `REJECTED = "rejected"`
+- [x] `backend/app/api/http/schemas/request.py` — 加 `REJECTED = "rejected"`
+- [x] `backend/app/application/dto/request_dto.py` — Literal 加 `"rejected"`
+- [x] `frontend/src/types/gateway.ts` — RequestStatus 加 `| 'rejected'`
 
-## 本轮结论
-- [x] 已立即落地：运行态真源同步
-- [x] 已立即落地：`decision-log.md` 初始化
-- [x] 已立即落地：规则文件必要微调
-- [x] 已明确：`next-task-draft.md` 暂不启用
-- [x] 已写明：暂不启用的原因、启用时机与启用条件
-- [x] 已保持：`decision-log.md` 与 `review-notes.md` 职责分离
+## 步骤2：修复 ConfirmationStatus — `approved` → `confirmed`，去掉 `cancelled`
+- [x] `backend/app/core/entities/confirmation.py` — `APPROVED = "approved"` → `CONFIRMED = "confirmed"`，删 `CANCELLED = "cancelled"`
+- [x] `backend/app/api/http/schemas/confirmation.py` — 同上
+- [x] `backend/app/application/dto/confirmation_dto.py` — `"approved"` → `"confirmed"`，删 `"cancelled"`
+- [x] `frontend/src/types/gateway.ts` — ConfirmationStatus 改为 `'pending' | 'confirmed' | 'rejected' | 'expired'`
+
+## 步骤3：修复 StreamEventType — 对齐契约事件族
+- [x] `backend/app/api/http/schemas/stream_event.py` — 替换全部枚举值为契约命名：
+  - `REQUEST_ACCEPTED = "request.accepted"`
+  - `RESPONSE_DELTA = "response.delta"`
+  - `RESPONSE_COMPLETED = "response.completed"`
+  - `CONFIRMATION_REQUIRED = "confirmation.required"`
+  - `REQUEST_STATUS_CHANGED = "request.status.changed"`
+  - `REQUEST_TERMINAL = "request.terminal"`
+- [x] `frontend/src/types/gateway.ts` — StreamEventType 替换为契约的6个值
+
+## 步骤4：检查下游引用与附加命名
+- [x] `frontend/src/types/confirmation.ts` — 已检查，契约仍保留 approve 动作路径，暂不改为 `confirm`
+- [x] `frontend/src/types/chat.ts` — 已确认无对旧 RequestStatus 值的隐式依赖
+- [x] `backend/app/api/http/schemas/confirmation.py` — 已检查，`ApproveConfirmationSchema` 保留动作名
+- [x] `frontend/src/types/gateway.ts` — 已检查，`ApproveConfirmationPayload` 保留动作名
+
+## 步骤5：全局残留检查
+- [x] 后端/前端代码搜索 `approved`（Confirmation 上下文），确认无残留
+- [x] 后端/前端代码搜索 `message.delta`、`message.completed`，确认无残留
+- [x] 后端/前端代码搜索 `confirmation.created`，确认无残留
+- [x] 后端/前端代码搜索 `request.completed`、`request.failed`（StreamEventType 上下文），确认无残留
+- [x] 后端/前端代码搜索 `trace.notice`，确认无残留
+- [x] 全仓排除 `docs/contracts/` 后的文档历史残留已记录在 `review-notes.md`
+
+## 步骤6：自检与回写
+- [x] 后端 entity → dto → schema 三层是否内部一致
+- [x] 前端 types/gateway.ts 是否与后端 schemas 一致
+- [x] 未越过阶段2边界
+- [x] 回写 `review-notes.md`
+- [x] 回写 `task-status.md`
 
 ## 本轮禁止项
-- [x] 不修改 backend/**
-- [x] 不修改 frontend/**
 - [x] 不修改 docs/contracts/**
-- [x] 不接真实 `provider / runtime / workflow / tool / HTTP / SSE`
-- [x] 不做大规模重构
-- [x] 不借机推进业务功能
-- [x] 不强行创建 `docs/decisions/next-task-draft.md`
+- [x] 不修改 docs/project/**
+- [x] 不修改 docs/phases/**
+- [x] 不修改 AGENTS.md、CLAUDE.md、README.md
+- [x] 不修改 backend/app/adapters/**
+- [x] 不修改 backend/app/core/ports/**
+- [x] 不修改 backend/app/core/policies/**
+- [x] 不接真实 provider / runtime / workflow / HTTP / SSE
 
 ## 执行完成后必须输出
 - [x] 本次改动摘要
 - [x] 受影响文件清单
 - [x] 当前真源是否仍一致
 - [x] 是否引入了新冲突
-- [x] 哪些优化已立即落地
-- [x] 哪些优化被延后，以及原因
+- [x] 全局残留检查结果
 - [x] 下一步建议
 
 ## 完成判定
-- [x] 当前任务、方案、清单、状态四者已同步
-- [x] `decision-log.md` 已建立并记录当前有效硬决策
-- [x] `next-task-draft.md` 的处理结论已明确写出
-- [x] 规则文件仅做必要微调，未再次变厚
-- [x] 未引入阶段 2 越界内容
+- [x] RequestStatus 后端三层 + 前端与契约一致（7个状态）
+- [x] ConfirmationStatus 后端三层 + 前端与契约一致（4个状态，用 confirmed）
+- [x] StreamEventType 后端 schema + 前端与契约一致（6个事件类型）
+- [x] 后端/前端代码无旧命名残留；文档历史残留已说明
+- [x] 未引入阶段2越界内容

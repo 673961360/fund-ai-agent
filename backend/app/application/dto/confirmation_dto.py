@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
-ConfirmationStatus = Literal["pending", "approved", "rejected", "expired", "cancelled"]
+ConfirmationStatus = Literal["pending", "confirmed", "rejected", "expired"]
 ConfirmationRiskLevel = Literal["low", "medium", "high"]
 
 
@@ -26,4 +26,3 @@ class ConfirmationDTO:
     created_at: datetime
     expires_at: datetime | None = None
     resolved_at: datetime | None = None
-

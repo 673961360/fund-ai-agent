@@ -1,52 +1,58 @@
 # 任务状态
 
 ## 当前任务
-- 任务ID：TASK-20260423-002
-- 任务名称：工作模式优化第一轮 - 同步收口版
+- 任务ID：TASK-20260423-003
+- 任务名称：阶段2核心对齐 - 代码与契约枚举/命名统一
 
 ## 当前状态
-review_pending
+done
 
 ## 当前判断
-当前最优先问题已从“规则文件过厚”转为“运行态真源未同步”。  
-本轮已完成同步收口、长期决策沉淀和启用条件判断，当前处于等待人工复核状态。
+TASK-20260423-003 已由 Claude 复核通过：
+- RequestStatus：后端三层 + 前端均为 7 个状态（含 rejected），与契约一致
+- ConfirmationStatus：后端三层 + 前端均为 4 个状态（pending | confirmed | rejected | expired），无 approved/cancelled，与契约一致
+- StreamEventType：后端 schema + 前端均为 6 个事件族命名，与契约一致
+- 全局残留搜索（approved / message.delta / message.completed / confirmation.created / trace.notice）：代码层 0 匹配
+- 下游引用文件（confirmation.ts、chat.ts）无需改动
+- ApproveConfirmationSchema / ApproveConfirmationPayload 保留动作名，契约仍保留 /approve 路径
+- 未越过阶段2边界，未引入真实集成
+
+本轮收口，阶段2"代码-契约对齐"核心目标可视为完成。
 
 ## 本轮目标
-- 同步 `current-task.md`、`solution-proposal.md`、`execution-checklist.md`
-- 建立 `docs/decisions/decision-log.md`
-- 判断 `next-task-draft.md` 是否应立即启用
-- 对规则文件做必要微调，但不重复大幅瘦身
+- 修复 RequestStatus：加 `rejected`
+- 修复 ConfirmationStatus：`approved` → `confirmed`，去掉 `cancelled`
+- 修复 StreamEventType：对齐契约事件族
+- 全局搜索确认无旧命名残留
 
 ## 已完成
-- 已将当前任务切换为“工作模式优化第一轮 - 同步收口版”
-- 已同步 `current-task.md`、`solution-proposal.md`、`execution-checklist.md`
-- 已同步 `task-status.md` 与 `review-notes.md`
-- 已新增并初始化 `docs/decisions/decision-log.md`
-- 已评估 `next-task-draft.md`，结论为：暂不启用
-- 已对 `AGENTS.md`、`CLAUDE.md`、`README.md`、`docs/agents/*.md` 做必要微调
+- 已由 Claude 完成方案收敛与运行态文件落盘
+- 已由 Codex 完成 RequestStatus 对齐：后端三层与前端类型均包含 `rejected`
+- 已由 Codex 完成 ConfirmationStatus 对齐：后端三层与前端类型均使用 `confirmed`，不再包含 Confirmation 上下文的 `approved` / `cancelled`
+- 已由 Codex 完成 StreamEventType 对齐：后端 schema 与前端类型均使用契约事件族
+- 已检查 `frontend/src/types/confirmation.ts` 与 `frontend/src/types/chat.ts`，未发现需同步改动的旧字面量分支
+- 已确认 `ApproveConfirmationSchema` / `ApproveConfirmationPayload` 保留动作名不变，因契约仍保留 `/approve` 路径
+- 已回写 `docs/decisions/review-notes.md`
 
 ## 当前阻塞
-- 当前任务本身无阻塞
-- 下一轮正式任务尚未创建
+- 无阻塞，等待 Claude 或人工复核
 
-## 关于 next-task-draft.md 的判断
-- 结论：暂不启用
-- 原因：当前最紧迫的问题是修正已有运行态真源，而不是继续新增一个草案文件；当前也尚未出现稳定、高频的“当前任务未结束但必须独立沉淀下一轮草案”的场景
-- 启用时机：当当前任务真源已连续多轮稳定维护，且下一轮任务草案需要在不改写 `current-task.md` 的情况下先行沉淀时
-- 启用条件：
-  1. `current-task.md`、`solution-proposal.md`、`execution-checklist.md` 已连续 2 轮以上保持同步
-  2. 同时存在两个以上待选择的下一轮候选，或当前任务与下一轮草案再次发生混写
+## 历史任务
+- TASK-20260423-001：运行态决策文件最小初始化 — done
+- TASK-20260423-002：工作模式优化第一轮 - 同步收口版 — done
+  - 收口记录：2026-04-23，完成运行态真源同步、decision-log.md 初始化、next-task-draft 判断
 
 ## 待确认 / 未完成
-- 等待人工复核本轮文档收口结果
-- 复核通过后，再创建下一轮正式任务单
+- 需复核代码改动与契约是否完全一致
+- 需复核运行态/模板文档中的旧词残留是否按历史描述处理，而非代码残留
+- 阶段3 mock 联调尚未启动
 
 ## 下一步建议
-1. 先确认本轮“同步收口版”文档修改是否通过
-2. 若通过，再新开下一轮正式任务，不直接复用本轮 `current-task.md`
-3. 下一轮若仍出现“当前任务 / 下一轮草案”互相污染，再考虑正式启用 `next-task-draft.md`
+1. Claude 或人工复核本轮代码 diff 与 `review-notes.md`
+2. 复核通过后将 TASK-20260423-003 状态更新为 done
+3. 阶段2"代码-契约对齐"收口后，再评估是否进入阶段3 mock 联调准备
 
 ## 最近一次更新
 - 更新时间：2026-04-23
 - 更新人：Codex
-- 更新说明：将当前状态同步到“工作模式优化第一轮 - 同步收口版”，补记 decision-log 初始化与 next-task-draft 判断结果
+- 更新说明：完成 TASK-20260423-003 允许范围内的代码执行与运行态回写

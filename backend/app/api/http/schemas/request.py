@@ -18,6 +18,7 @@ class RequestStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    REJECTED = "rejected"
 
 
 class CreateRequestSchema(BaseModel):
@@ -40,4 +41,3 @@ class RequestSchema(BaseModel):
     trace_id: str = Field(description="Trace identifier.")
     created_at: datetime = Field(description="Creation timestamp.")
     updated_at: datetime | None = Field(default=None, description="Last update timestamp.")
-

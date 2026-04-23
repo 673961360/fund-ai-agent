@@ -15,6 +15,7 @@ class RequestStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    REJECTED = "rejected"
 
 
 @dataclass(slots=True)
@@ -39,4 +40,3 @@ class RequestEntity:
     trace_id: str
     created_at: datetime
     updated_at: datetime | None = None
-

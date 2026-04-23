@@ -13,6 +13,7 @@ RequestStatus = Literal[
     "completed",
     "failed",
     "cancelled",
+    "rejected",
 ]
 
 
@@ -38,4 +39,3 @@ class RequestDTO:
     trace_id: str
     created_at: datetime
     updated_at: datetime | None = None
-

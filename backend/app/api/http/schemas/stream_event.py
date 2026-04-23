@@ -10,12 +10,12 @@ from pydantic import BaseModel, Field
 
 
 class StreamEventType(StrEnum):
-    MESSAGE_DELTA = "message.delta"
-    MESSAGE_COMPLETED = "message.completed"
-    CONFIRMATION_CREATED = "confirmation.created"
-    REQUEST_COMPLETED = "request.completed"
-    REQUEST_FAILED = "request.failed"
-    TRACE_NOTICE = "trace.notice"
+    REQUEST_ACCEPTED = "request.accepted"
+    RESPONSE_DELTA = "response.delta"
+    RESPONSE_COMPLETED = "response.completed"
+    CONFIRMATION_REQUIRED = "confirmation.required"
+    REQUEST_STATUS_CHANGED = "request.status.changed"
+    REQUEST_TERMINAL = "request.terminal"
 
 
 class StreamEventSchema(BaseModel):
@@ -30,4 +30,3 @@ class StreamEventSchema(BaseModel):
     timestamp: datetime = Field(description="Event timestamp.")
     payload: dict[str, Any] = Field(default_factory=dict, description="Event payload placeholder.")
     trace_id: str = Field(description="Trace identifier.")
-

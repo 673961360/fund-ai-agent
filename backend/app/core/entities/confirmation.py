@@ -9,10 +9,9 @@ from enum import StrEnum
 
 class ConfirmationStatus(StrEnum):
     PENDING = "pending"
-    APPROVED = "approved"
+    CONFIRMED = "confirmed"
     REJECTED = "rejected"
     EXPIRED = "expired"
-    CANCELLED = "cancelled"
 
 
 class ConfirmationRiskLevel(StrEnum):
@@ -37,4 +36,3 @@ class ConfirmationEntity:
     created_at: datetime
     expires_at: datetime | None = None
     resolved_at: datetime | None = None
-

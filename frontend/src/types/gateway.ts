@@ -9,15 +9,16 @@ export type RequestStatus =
   | 'completed'
   | 'failed'
   | 'cancelled'
-export type ConfirmationStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'cancelled'
+  | 'rejected'
+export type ConfirmationStatus = 'pending' | 'confirmed' | 'rejected' | 'expired'
 export type ConfirmationRiskLevel = 'low' | 'medium' | 'high'
 export type StreamEventType =
-  | 'message.delta'
-  | 'message.completed'
-  | 'confirmation.created'
-  | 'request.completed'
-  | 'request.failed'
-  | 'trace.notice'
+  | 'request.accepted'
+  | 'response.delta'
+  | 'response.completed'
+  | 'confirmation.required'
+  | 'request.status.changed'
+  | 'request.terminal'
 
 export interface SessionResource {
   id: Identifier

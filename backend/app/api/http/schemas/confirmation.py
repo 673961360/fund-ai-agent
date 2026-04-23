@@ -10,10 +10,9 @@ from pydantic import BaseModel, Field
 
 class ConfirmationStatus(StrEnum):
     PENDING = "pending"
-    APPROVED = "approved"
+    CONFIRMED = "confirmed"
     REJECTED = "rejected"
     EXPIRED = "expired"
-    CANCELLED = "cancelled"
 
 
 class ConfirmationRiskLevel(StrEnum):
@@ -49,4 +48,3 @@ class RejectConfirmationSchema(BaseModel):
     """Input payload placeholder for rejection action."""
 
     reason: str = Field(description="Rejection reason.")
-

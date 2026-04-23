@@ -42,3 +42,9 @@
 - 决策：`review-notes.md` 记录单轮执行结果、风险、残留问题；`decision-log.md` 只记录跨轮长期有效的硬决策
 - 影响：后续轮次查长期口径时优先看 `decision-log.md`，查单轮执行细节时看 `review-notes.md`
 - 来源：`docs/decisions/review-notes.md`、`docs/decisions/decision-log.md`
+
+### DEC-20260423-007 代码-契约对齐标准
+- 状态：active
+- 决策：后端三层（entity → dto → schema）和前端 types 的枚举值、事件命名必须与契约文档（docs/contracts/*.md）完全一致，以契约为真源不反向修改契约
+- 影响：后续阶段3/4的代码实现必须沿用当前已对齐的枚举和命名，不得自行引入新状态值或新事件类型
+- 来源：TASK-20260423-003 执行结果
