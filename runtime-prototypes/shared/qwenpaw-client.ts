@@ -8,10 +8,10 @@ import type {
   QwenPawLoginRequest,
   QwenPawLoginResult,
   QwenPawRequestMessage,
+  QwenPawRuntimeConfigInput,
   SendChatOptions,
 } from './types';
 
-const DEFAULT_TARGET = 'http://127.0.0.1:8088';
 const DEFAULT_PROXY_PREFIX = '/qwenpaw-api';
 const DEFAULT_USER_ID = 'default_user';
 const DEFAULT_CHANNEL = 'console';
@@ -19,15 +19,67 @@ const DEFAULT_CHANNEL = 'console';
 export const TOKEN_STORAGE_KEY = 'qwenpaw_auth_token';
 export const USER_STORAGE_KEY = 'qwenpaw_username';
 export const AGENT_STORAGE_KEY = 'qwenpaw-agent-storage';
+export const RUNTIME_CONFIG_STORAGE_KEY = 'qwenpaw_runtime_config';
 
-export function getQwenPawClientConfig(): QwenPawClientConfig {
+export function getDefaultQwenPawClientConfig(): QwenPawClientConfig {
   return {
-    target: import.meta.env.VITE_QWENPAW_TARGET || DEFAULT_TARGET,
-    proxyPrefix: import.meta.env.VITE_QWENPAW_PROXY_PREFIX || DEFAULT_PROXY_PREFIX,
+    apiBaseUrl: import.meta.env.VITE_QWENPAW_PROXY_PREFIX || DEFAULT_PROXY_PREFIX,
     userId: import.meta.env.VITE_QWENPAW_USER_ID || DEFAULT_USER_ID,
     channel: import.meta.env.VITE_QWENPAW_CHANNEL || DEFAULT_CHANNEL,
     model: import.meta.env.VITE_QWENPAW_MODEL || '',
   };
+}
+
+export function getQwenPawClientConfig(): QwenPawClientConfig {
+  return getStoredQwenPawClientConfig() ?? getDefaultQwenPawClientConfig();
+}
+
+export function getStoredQwenPawClientConfig(): QwenPawClientConfig | null {
+  if (!hasStorage()) {
+    return null;
+  }
+
+  const rawValue = localStorage.getItem(RUNTIME_CONFIG_STORAGE_KEY);
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as QwenPawRuntimeConfigInput;
+    return normalizeRuntimeConfigInput(parsed);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredQwenPawClientConfig(config: QwenPawRuntimeConfigInput): QwenPawClientConfig {
+  const normalizedConfig = normalizeRuntimeConfigInput(config);
+  if (hasStorage()) {
+    localStorage.setItem(RUNTIME_CONFIG_STORAGE_KEY, JSON.stringify(normalizedConfig));
+  }
+
+  return normalizedConfig;
+}
+
+export function resetStoredQwenPawClientConfig(): void {
+  if (!hasStorage()) {
+    return;
+  }
+
+  localStorage.removeItem(RUNTIME_CONFIG_STORAGE_KEY);
+}
+
+export function validateQwenPawApiBaseUrl(value: string): string | null {
+  const normalizedValue = value.trim();
+  if (!normalizedValue) {
+    return '请输入 API 基址。';
+  }
+
+  if (isAbsoluteUrl(normalizedValue) || normalizedValue.startsWith('/')) {
+    return null;
+  }
+
+  return 'API 基址必须以 http://、https:// 或 / 开头。';
 }
 
 export function getStoredToken(): string | null {
@@ -242,7 +294,13 @@ function buildSessionId(agentId: string, userId: string): string {
 
 function resolveApiUrl(path: string): string {
   const config = getQwenPawClientConfig();
-  return `${normalizePath(config.proxyPrefix)}${normalizePath(path)}`;
+  const apiBaseUrl = normalizeApiBaseUrl(config.apiBaseUrl);
+
+  if (isAbsoluteUrl(apiBaseUrl)) {
+    return `${removeTrailingSlash(apiBaseUrl)}${normalizePath(path)}`;
+  }
+
+  return `${normalizePath(apiBaseUrl)}${normalizePath(path)}`;
 }
 
 function normalizePath(value: string): string {
@@ -251,6 +309,55 @@ function normalizePath(value: string): string {
   }
 
   return value.startsWith('/') ? value : `/${value}`;
+}
+
+function normalizeRuntimeConfigInput(config: QwenPawRuntimeConfigInput): QwenPawClientConfig {
+  const defaults = getDefaultQwenPawClientConfig();
+  const normalizedApiBaseUrl = normalizeApiBaseUrl(config.apiBaseUrl);
+
+  return {
+    apiBaseUrl: normalizedApiBaseUrl || defaults.apiBaseUrl,
+    userId: normalizeText(config.userId) || defaults.userId,
+    channel: normalizeText(config.channel) || defaults.channel,
+    model: normalizeText(config.model),
+  };
+}
+
+function normalizeApiBaseUrl(value: string | undefined): string {
+  const normalizedValue = normalizeText(value);
+  if (!normalizedValue) {
+    return '';
+  }
+
+  if (isAbsoluteUrl(normalizedValue)) {
+    return removeTrailingSlash(normalizedValue);
+  }
+
+  if (normalizedValue.startsWith('/')) {
+    return normalizedValue === '/' ? normalizedValue : removeTrailingSlash(normalizedValue);
+  }
+
+  return '';
+}
+
+function normalizeText(value: string | undefined): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function removeTrailingSlash(value: string): string {
+  if (value === '/') {
+    return value;
+  }
+
+  return value.replace(/\/+$/, '');
+}
+
+function isAbsoluteUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
+function hasStorage(): boolean {
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 }
 
 async function readJsonResponse<T>(response: Response, fallbackMessage: string): Promise<T> {

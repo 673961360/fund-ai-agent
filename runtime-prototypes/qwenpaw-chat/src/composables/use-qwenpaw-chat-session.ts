@@ -21,7 +21,6 @@ export function useQwenPawChatSession() {
   const draft = ref('');
   const activeController = ref<AbortController | null>(null);
   const activeAgentId = ref<string | null>(null);
-  const runtimeConfig = getQwenPawClientConfig();
 
   const hasMessages = computed(() => state.value.messages.length > 0);
   const messageCount = computed(() => state.value.messages.length);
@@ -53,6 +52,7 @@ export function useQwenPawChatSession() {
       terminalStatus: null,
       errorMessage: null,
     };
+    const runtimeConfig = getQwenPawClientConfig();
 
     try {
       await sendQwenPawChat({
@@ -215,7 +215,6 @@ export function useQwenPawChatSession() {
 
   return {
     draft,
-    runtimeConfig,
     messages: computed(() => state.value.messages),
     isSending: computed(() => state.value.isSending),
     errorMessage: computed(() => state.value.errorMessage),

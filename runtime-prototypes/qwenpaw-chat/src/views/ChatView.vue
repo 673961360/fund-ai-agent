@@ -1,10 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, watch } from 'vue';
-import ChatInput from '@/components/ChatInput.vue';
-import MessageList from '@/components/MessageList.vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import ChatInputBar from '@/components/ChatInputBar.vue';
+import ChatMessageList from '@/components/ChatMessageList.vue';
+import ChatSidebar from '@/components/ChatSidebar.vue';
+import ChatHeader from '@/components/ChatHeader.vue';
 import { useQwenPawAgents } from '@/composables/use-qwenpaw-agents';
 import { useQwenPawAuth } from '@/composables/use-qwenpaw-auth';
 import { useQwenPawChatSession } from '@/composables/use-qwenpaw-chat-session';
+import type { RuntimeConfigFormState } from '@/types/chat-ui';
+import {
+  getDefaultQwenPawClientConfig,
+  getQwenPawClientConfig,
+  resetStoredQwenPawClientConfig,
+  setStoredQwenPawClientConfig,
+  validateQwenPawApiBaseUrl,
+} from '@proto-shared/qwenpaw-client';
+import type { QwenPawClientConfig } from '@proto-shared/types';
 
 const {
   authState,
@@ -32,7 +43,6 @@ const {
   hasMessages,
   isSending,
   messages,
-  runtimeConfig,
   sendDraft,
   setActiveAgent,
   stopStreaming,
@@ -42,6 +52,11 @@ const loginForm = reactive({
   username: '',
   password: '',
 });
+const runtimeConfig = ref<QwenPawClientConfig>(getQwenPawClientConfig());
+const runtimeConfigForm = reactive<RuntimeConfigFormState>(createRuntimeConfigForm(runtimeConfig.value));
+const apiBaseUrlErrorMessage = ref('');
+const configFeedbackMessage = ref('');
+const isRuntimeConfigExpanded = ref(false);
 
 const isAuthReady = computed(
   () => !authState.value.isLoading && (!authState.value.enabled || authState.value.valid),
@@ -55,79 +70,177 @@ const isChatDisabled = computed(
     isSubmitting.value ||
     isSending.value,
 );
+const isConfigBusy = computed(
+  () => authState.value.isLoading || areAgentsLoading.value || isSubmitting.value || isSending.value,
+);
+const isConfigDirty = computed(() => {
+  const currentConfig = runtimeConfig.value;
+  return (
+    normalizeText(runtimeConfigForm.apiBaseUrl) !== currentConfig.apiBaseUrl ||
+    normalizeText(runtimeConfigForm.channel) !== currentConfig.channel ||
+    normalizeText(runtimeConfigForm.model) !== currentConfig.model ||
+    normalizeText(runtimeConfigForm.userId) !== currentConfig.userId
+  );
+});
 const combinedErrorMessage = computed(
   () => chatErrorMessage.value ?? agentsErrorMessage.value ?? authErrorMessage.value,
 );
-const authStatusLabel = computed(() => {
-  if (authState.value.isLoading) {
-    return '检查中';
-  }
-
-  if (!authState.value.enabled) {
-    return '已关闭';
-  }
-
-  if (authState.value.valid) {
-    return '已登录';
-  }
-
-  return '未登录';
-});
 const conversationStatusLabel = computed(() => {
   if (combinedErrorMessage.value) {
-    return '错误';
+    return '异常';
   }
 
   if (isSending.value) {
     return '生成中';
   }
 
-  return '空闲';
+  if (requiresLogin.value) {
+    return '需登录';
+  }
+
+  if (!selectedAgentId.value) {
+    return '待命';
+  }
+
+  return '就绪';
 });
 const conversationStatusTone = computed(() => {
   if (combinedErrorMessage.value) {
-    return 'error';
+    return 'error' as const;
   }
 
   if (isSending.value) {
-    return 'busy';
+    return 'busy' as const;
   }
 
-  return 'idle';
+  if (requiresLogin.value) {
+    return 'warning' as const;
+  }
+
+  return 'idle' as const;
 });
-const displayConfigItems = computed(() => [
-  {
-    label: 'QwenPaw 地址',
-    value: runtimeConfig.target,
-  },
-  {
-    label: '当前 Agent',
-    value: selectedAgent.value?.name || '未选择',
-  },
-  {
-    label: 'Channel',
-    value: runtimeConfig.channel || '未指定',
-  },
-  {
-    label: '模型',
-    value: runtimeConfig.model?.trim() || '未指定',
-  },
-  {
-    label: '认证状态',
-    value: authStatusLabel.value,
-  },
-]);
-const bannerMessage = computed(() => {
-  if (!combinedErrorMessage.value) {
-    return '';
+const conversationTitle = 'QwenPaw Chat';
+const currentAgentName = computed(() => selectedAgent.value?.name || '未选择 Agent');
+const emptyStateDescription = computed(() => {
+  if (requiresLogin.value) {
+    return '先登录，再开始聊天。';
   }
 
-  if (chatErrorMessage.value) {
-    return '请查看聊天区中的错误消息。';
+  if (areAgentsLoading.value) {
+    return '正在加载 Agent。';
   }
 
-  return combinedErrorMessage.value;
+  if (!selectedAgentId.value) {
+    return '先在右侧选择 Agent。';
+  }
+
+  return '发送第一条消息。';
 });
+const inputPlaceholder = computed(() => {
+  if (requiresLogin.value) {
+    return '请先登录';
+  }
+
+  if (areAgentsLoading.value) {
+    return '正在加载 Agent';
+  }
+
+  if (!selectedAgentId.value) {
+    return '选择 Agent 后开始聊天';
+  }
+
+  if (isSending.value) {
+    return '等待当前回复完成';
+  }
+
+  return `给 ${selectedAgent.value?.name || 'QwenPaw'} 发送消息`;
+});
+const inputHelperText = computed(() => {
+  if (requiresLogin.value) {
+    return '右侧登录后可继续';
+  }
+
+  if (areAgentsLoading.value) {
+    return '加载 Agent 中';
+  }
+
+  if (!selectedAgentId.value) {
+    return '先选择 Agent';
+  }
+
+  if (isSending.value) {
+    return '正在生成回复';
+  }
+
+  if (combinedErrorMessage.value) {
+    return '上次请求失败，可直接重试';
+  }
+
+  return 'Enter 发送，Shift + Enter 换行';
+});
+
+function syncRuntimeConfig(config: QwenPawClientConfig = getQwenPawClientConfig()): void {
+  runtimeConfig.value = config;
+  runtimeConfigForm.apiBaseUrl = config.apiBaseUrl;
+  runtimeConfigForm.channel = config.channel;
+  runtimeConfigForm.model = config.model;
+  runtimeConfigForm.userId = config.userId;
+}
+
+function clearConfigMessages(): void {
+  apiBaseUrlErrorMessage.value = '';
+  configFeedbackMessage.value = '';
+}
+
+function toggleRuntimeConfig(): void {
+  isRuntimeConfigExpanded.value = !isRuntimeConfigExpanded.value;
+}
+
+function updateLoginField(field: 'username' | 'password', value: string): void {
+  loginForm[field] = value;
+}
+
+function updateRuntimeConfigField(field: keyof RuntimeConfigFormState, value: string): void {
+  runtimeConfigForm[field] = value;
+  apiBaseUrlErrorMessage.value = '';
+  configFeedbackMessage.value = '';
+}
+
+async function refreshRuntimeContext(): Promise<void> {
+  clearConversation();
+  await initialize();
+}
+
+async function handleSaveConfig(): Promise<void> {
+  clearConfigMessages();
+
+  const apiBaseUrl = normalizeText(runtimeConfigForm.apiBaseUrl);
+  const apiBaseUrlError = validateQwenPawApiBaseUrl(apiBaseUrl);
+  if (apiBaseUrlError) {
+    apiBaseUrlErrorMessage.value = apiBaseUrlError;
+    return;
+  }
+
+  const nextConfig = setStoredQwenPawClientConfig({
+    apiBaseUrl,
+    channel: normalizeText(runtimeConfigForm.channel) || runtimeConfig.value.channel,
+    model: normalizeText(runtimeConfigForm.model),
+    userId: normalizeText(runtimeConfigForm.userId) || runtimeConfig.value.userId,
+  });
+
+  syncRuntimeConfig(nextConfig);
+  await refreshRuntimeContext();
+  configFeedbackMessage.value = '配置已保存并立即生效。';
+}
+
+async function handleResetConfig(): Promise<void> {
+  clearConfigMessages();
+  resetStoredQwenPawClientConfig();
+  const defaultConfig = getDefaultQwenPawClientConfig();
+  syncRuntimeConfig(defaultConfig);
+  await refreshRuntimeContext();
+  configFeedbackMessage.value = '已恢复默认配置。';
+}
 
 async function handleSendDraft(): Promise<void> {
   await sendDraft({
@@ -163,16 +276,12 @@ async function handleLogin(): Promise<void> {
   loginForm.password = '';
 }
 
-function handleAgentChange(event: Event): void {
-  const target = event.target as HTMLSelectElement;
-  if (!target.value) {
-    return;
-  }
-
-  selectAgent(target.value);
+function handleAgentSelect(agentId: string): void {
+  selectAgent(agentId);
 }
 
 onMounted(() => {
+  syncRuntimeConfig();
   void initialize();
 });
 
@@ -196,121 +305,76 @@ watch(
   },
   { immediate: true },
 );
+
+function createRuntimeConfigForm(config: QwenPawClientConfig): RuntimeConfigFormState {
+  return {
+    apiBaseUrl: config.apiBaseUrl,
+    channel: config.channel,
+    model: config.model,
+    userId: config.userId,
+  };
+}
+
+function normalizeText(value: string): string {
+  return value.trim();
+}
 </script>
 
 <template>
   <main class="chat-view">
-    <section class="config-bar card-panel">
-      <div
-        v-for="item in displayConfigItems"
-        :key="item.label"
-        class="config-bar__item"
-        :title="item.value"
-      >
-        <span class="config-bar__label">{{ item.label }}</span>
-        <strong class="config-bar__value">{{ item.value }}</strong>
-      </div>
-    </section>
-
-    <section v-if="combinedErrorMessage" class="error-banner">
-      <strong>本次请求失败</strong>
-      <p>{{ bannerMessage }}</p>
-    </section>
-
-    <section class="workspace-grid">
-      <div class="conversation-column">
-        <MessageList
-          :messages="messages"
+    <section class="chat-layout">
+      <section class="chat-shell card-panel">
+        <ChatHeader
+          :title="conversationTitle"
+          :agent-name="currentAgentName"
           :status-label="conversationStatusLabel"
           :status-tone="conversationStatusTone"
+          :error-message="combinedErrorMessage || ''"
         />
 
-        <ChatInput v-model="draft" :busy="isSending" :disabled="isChatDisabled" @submit="handleSendDraft" />
-      </div>
+        <ChatMessageList :messages="messages" :empty-description="emptyStateDescription" />
 
-      <aside class="workspace-grid__sidebar">
-        <section class="card-panel control-panel">
-          <header class="control-panel__header">
-            <div>
-              <h2>会话控制</h2>
-              <p>切换 Agent 或控制当前会话。</p>
-            </div>
-          </header>
+        <ChatInputBar
+          v-model="draft"
+          :busy="isSending"
+          :disabled="isChatDisabled"
+          :placeholder="inputPlaceholder"
+          :helper-text="inputHelperText"
+          @submit="handleSendDraft"
+        />
+      </section>
 
-          <div class="control-panel__field">
-            <label class="control-panel__label" for="agent-select">当前 Agent</label>
-            <select
-              id="agent-select"
-              class="control-panel__select"
-              :disabled="areAgentsLoading || isSending || agents.length === 0"
-              :value="selectedAgentId || ''"
-              @change="handleAgentChange"
-            >
-              <option value="" disabled>{{ areAgentsLoading ? '加载 Agent 中...' : '请选择 Agent' }}</option>
-              <option v-for="agent in agents" :key="agent.id" :value="agent.id" :disabled="!agent.enabled">
-                {{ agent.name }}{{ agent.enabled ? '' : '（已禁用）' }}
-              </option>
-            </select>
-          </div>
-
-          <div class="control-panel__actions">
-            <button
-              class="ghost-button ghost-button--warning"
-              type="button"
-              :disabled="!isSending || !selectedAgentId"
-              @click="handleStop"
-            >
-              停止
-            </button>
-            <button class="ghost-button" type="button" :disabled="isSending || !hasMessages" @click="clearConversation">
-              清空
-            </button>
-          </div>
-        </section>
-
-        <section v-if="requiresLogin" class="card-panel auth-card">
-          <header class="auth-card__header">
-            <div>
-              <h2>需要登录</h2>
-              <p>当前 QwenPaw 已开启认证，请先登录后再继续聊天。</p>
-            </div>
-          </header>
-
-          <label class="auth-card__label" for="qwenpaw-username">用户名</label>
-          <input
-            id="qwenpaw-username"
-            v-model.trim="loginForm.username"
-            class="auth-card__input"
-            type="text"
-            autocomplete="username"
-            placeholder="请输入用户名"
-          />
-
-          <label class="auth-card__label" for="qwenpaw-password">密码</label>
-          <input
-            id="qwenpaw-password"
-            v-model="loginForm.password"
-            class="auth-card__input"
-            type="password"
-            autocomplete="current-password"
-            placeholder="请输入密码"
-            @keyup.enter="handleLogin"
-          />
-
-          <p v-if="!hasUsers" class="auth-card__hint auth-card__hint--warning">
-            当前服务还没有检测到已注册用户，可能需要先初始化账号。
-          </p>
-
-          <button
-            class="chat-input__submit auth-card__submit"
-            type="button"
-            :disabled="isSubmitting || !loginForm.username || !loginForm.password"
-            @click="handleLogin"
-          >
-            {{ isSubmitting ? '登录中...' : '登录' }}
-          </button>
-        </section>
-      </aside>
+      <ChatSidebar
+        :agents="agents"
+        :selected-agent-id="selectedAgentId"
+        :are-agents-loading="areAgentsLoading"
+        :is-sending="isSending"
+        :has-messages="hasMessages"
+        :requires-login="requiresLogin"
+        :has-users="hasUsers"
+        :is-submitting="isSubmitting"
+        :username="loginForm.username"
+        :password="loginForm.password"
+        :config-expanded="isRuntimeConfigExpanded"
+        :config-busy="isConfigBusy"
+        :config-dirty="isConfigDirty"
+        :runtime-config="runtimeConfigForm"
+        :api-base-url-error-message="apiBaseUrlErrorMessage"
+        :config-feedback-message="configFeedbackMessage"
+        @select-agent="handleAgentSelect"
+        @stop="handleStop"
+        @clear="clearConversation"
+        @login="handleLogin"
+        @toggle-config="toggleRuntimeConfig"
+        @update:username="updateLoginField('username', $event)"
+        @update:password="updateLoginField('password', $event)"
+        @update:api-base-url="updateRuntimeConfigField('apiBaseUrl', $event)"
+        @update:channel="updateRuntimeConfigField('channel', $event)"
+        @update:model="updateRuntimeConfigField('model', $event)"
+        @update:user-id="updateRuntimeConfigField('userId', $event)"
+        @save-config="handleSaveConfig"
+        @reset-config="handleResetConfig"
+      />
     </section>
   </main>
 </template>

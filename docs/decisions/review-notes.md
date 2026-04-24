@@ -378,3 +378,61 @@ M2 **全部满足**，可视为退出。
 - 未触碰主线 frontend/ 或 backend/ ✅
 - 原型代码隔离在 runtime-prototypes/ 内 ✅
 - 未引入主线依赖 ✅
+
+---
+
+## TASK-20260424-007 Chat-First 重构执行记录
+
+- 执行时间：2026-04-24
+- 执行人：Codex
+- 执行状态：阶段内子项完成
+- 执行结论：已将 QwenPaw 原型页重构为“聊天主区优先 + 右侧弱化侧栏”的 chat-first 主界面，未改动 shared 类型、SSE、认证和聊天流底层语义。
+
+### 本次改动摘要
+
+1. 聊天主区重构：
+   - 新增 `ChatHeader` 与 `StatusSummary`
+   - 原顶部大卡片压缩为 header 内轻量 summary
+   - 错误提示合并进聊天头部，不再单独占整行空间
+
+2. 消息流与输入区重构：
+   - `MessageList` 去掉面板头部，只保留消息流与空状态
+   - `ChatInput` 改为 chat composer，默认 3 行，自适应高度上限调整为 180px
+   - 发送按钮升级为页面唯一高权重主按钮
+
+3. 侧栏弱化与分组：
+   - 新增 `RuntimeSidebar` / `SessionControls`
+   - 登录区、会话控制、运行时配置分组清晰
+   - 运行时配置默认折叠，保存/重置只在展开后出现
+
+4. 全局样式重写：
+   - `chat.css` 改为两栏 chat-first 布局
+   - 背景、阴影、边框和颜色层级整体收敛
+   - 增补桌面与窄屏断点，保证聊天区始终是主区域
+
+### 受影响文件
+
+- `runtime-prototypes/qwenpaw-chat/src/views/ChatView.vue`
+- `runtime-prototypes/qwenpaw-chat/src/components/ChatHeader.vue`
+- `runtime-prototypes/qwenpaw-chat/src/components/StatusSummary.vue`
+- `runtime-prototypes/qwenpaw-chat/src/components/RuntimeSidebar.vue`
+- `runtime-prototypes/qwenpaw-chat/src/components/SessionControls.vue`
+- `runtime-prototypes/qwenpaw-chat/src/components/MessageList.vue`
+- `runtime-prototypes/qwenpaw-chat/src/components/ChatInput.vue`
+- `runtime-prototypes/qwenpaw-chat/src/styles/chat.css`
+- `runtime-prototypes/qwenpaw-chat/src/types/chat-ui.ts`
+- `docs/decisions/task-board.md`
+- `docs/decisions/solution-proposal.md`
+- `docs/decisions/review-notes.md`
+
+### 验证结果
+
+- `npm.cmd run typecheck`：通过
+- `npm.cmd run build`：通过
+- `vite build` 产物：32 modules，`index-CBDQHk-G.css` 10.29 kB，`index-DXOhqnIP.js` 92.77 kB
+- `git diff --check -- runtime-prototypes/qwenpaw-chat`：无 whitespace error，仅有 LF/CRLF 提示
+
+### 残留说明
+
+- `runtime-prototypes/qwenpaw-chat/src/composables/use-qwenpaw-chat-session.ts` 在执行前已存在未提交修改，本轮未改动其逻辑。
+- `.env.local` 与真实 QwenPaw 服务的手工联调仍未执行，本轮验证范围仅覆盖类型检查与生产构建。

@@ -5,11 +5,15 @@ import type { ChatMessage } from '@proto-shared/types';
 
 interface Props {
   messages: ChatMessage[];
-  statusLabel: string;
-  statusTone: 'idle' | 'busy' | 'error';
+  emptyTitle?: string;
+  emptyDescription?: string;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  emptyTitle: '开始一段新对话',
+  emptyDescription: '发送第一条消息。',
+});
+
 const containerRef = ref<HTMLElement | null>(null);
 
 watch(
@@ -25,21 +29,13 @@ watch(
 </script>
 
 <template>
-  <section class="message-list card-panel">
-    <header class="message-list__header">
-      <div>
-        <h2>聊天记录</h2>
-        <p>回复会随着上游流式输出逐步出现。</p>
-      </div>
-      <span class="message-list__status" :data-tone="statusTone">{{ statusLabel }}</span>
-    </header>
-
-    <div v-if="messages.length === 0" class="message-list__empty">
-      <p>还没有消息</p>
-      <span>选择 Agent 后发送一条消息，验证直连聊天链路。</span>
+  <section class="chat-message-list" aria-label="聊天消息流">
+    <div v-if="messages.length === 0" class="chat-message-list__empty">
+      <p>{{ emptyTitle }}</p>
+      <span>{{ emptyDescription }}</span>
     </div>
 
-    <div v-else ref="containerRef" class="message-list__items">
+    <div v-else ref="containerRef" class="chat-message-list__items">
       <MessageBubble v-for="message in messages" :key="message.id" :message="message" />
     </div>
   </section>

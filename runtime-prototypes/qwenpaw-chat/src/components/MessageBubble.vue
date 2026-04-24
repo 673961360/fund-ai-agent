@@ -37,7 +37,7 @@ const timeLabel = computed(() =>
 <template>
   <article :class="bubbleClass">
     <header class="message-bubble__meta">
-      <strong>{{ roleLabel }}</strong>
+      <strong class="message-bubble__role">{{ roleLabel }}</strong>
       <span>{{ timeLabel }}</span>
     </header>
     <p class="message-bubble__content">{{ message.content || ' ' }}</p>

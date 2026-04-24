@@ -17,11 +17,17 @@ export interface ChatState {
 }
 
 export interface QwenPawClientConfig {
-  target: string;
-  proxyPrefix: string;
+  apiBaseUrl: string;
   userId: string;
   channel: string;
   model: string;
+}
+
+export interface QwenPawRuntimeConfigInput {
+  apiBaseUrl?: string;
+  userId?: string;
+  channel?: string;
+  model?: string;
 }
 
 export interface QwenPawAuthStatusResponse {

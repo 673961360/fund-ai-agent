@@ -101,13 +101,61 @@ src/
 - 列表渲染必须提供稳定 `key`
 - 表格、表单、弹框等复杂结构应拆分子组件
 
-### JS / TypeScript
+### Composition API 编码规范
 
-- Composition API；复杂状态优先 `computed` 与可复用 composables
+- 页面与复杂组件统一使用 `<script setup lang="ts">` + Composition API
+- 复杂状态优先 `computed` 与可复用 `composables`，避免滥用 `watch`
 - 方法命名体现业务意图；布尔变量用 `is/has/can` 前缀
-- 请求、状态、视图逻辑分层
+- 请求、状态、视图逻辑分层；组件内不堆砌接口调用与数据转换
 - `console.log` / `debugger` 提交前必须清理
 - Store 按业务域拆分，命名 `use` + 领域 + `Store`
+
+### TypeScript 语法规范
+
+- **优先使用 `interface` 而非 `type`** 定义对象结构
+
+```ts
+// ✅ 推荐：使用 interface
+interface UserInfo {
+  id: string
+  name: string
+  email: string
+}
+
+// ❌ 不推荐：对象结构用 type
+type UserInfo = { id: string; name: string; email: string }
+
+// ✅ type 适用于联合类型、工具类型等场景
+type Status = 'pending' | 'success' | 'error'
+type Nullable<T> = T | null
+```
+
+- **禁止使用 `any`**，使用 `unknown` 或具体类型替代
+- **函数必须标注参数和返回值类型**
+
+```ts
+// ✅ 普通函数
+function calculateTotal(price: number, quantity: number): number {
+  return price * quantity
+}
+
+// ✅ 箭头函数
+const formatDate = (date: Date, format: string): string => {
+  return date.toLocaleDateString()
+}
+
+// ✅ 异步函数
+async function fetchUserList(params: QueryParams): Promise<UserListResponse> {
+  const res = await api.get('/users', { params })
+  return res.data
+}
+
+// ❌ 缺少返回值类型
+function handleClick() { }  // 应标注为 void
+```
+
+- **使用类型守卫进行类型收窄**
+- **组件 Props 使用 `interface` 定义**，命名格式为 `组件名 + Props`
 
 ### 注释（Why-First）
 
