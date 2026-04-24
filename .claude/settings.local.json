@@ -1,9 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xargs grep *)",
-      "Bash(echo \"Exit: $?\")",
-      "Bash(npm --version)"
+      "Bash(*)"
     ]
   }
 }

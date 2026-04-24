@@ -248,7 +248,7 @@ v0 的成功不以“功能数量”作为第一标准，而以“边界与可�
 - `AGENTS.md`
 - `docs/demo/stage-2-minimal-loop-definition.md`
 - `docs/project/milestones.md`
-- `docs/decisions/current-task.md`
+- `docs/decisions/task-board.md`
 
 ---
 
@@ -293,7 +293,7 @@ v0 的成功不以“功能数量”作为第一标准，而以“边界与可�
 2. `docs/project/project-brief.md`
 3. `docs/demo/stage-2-minimal-loop-definition.md`
 4. `docs/project/milestones.md`
-5. `docs/decisions/current-task.md`
+5. `docs/decisions/task-board.md`
 6. `docs/frontend/vue3-ruler-skills-compact.md`（涉及前端任务时必读）
 7. 当前阶段涉及的 contracts 文档
 8. 当前阶段涉及的 architecture / integration 文档

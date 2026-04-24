@@ -5,12 +5,12 @@
 ## 当前状态
 
 当前仍处于骨架与契约准备阶段。  
-默认阶段为 **阶段 2：统一模型、契约对齐、最小联调准备**。  
-本阶段只做模型、状态、契约与最小闭环定义，不做真实集成。
+默认阶段为 **阶段 3：最小闭环跑通（Mock-Only）**。  
+本阶段使用 MockRuntimeAdapter 打通最小可演示链路，不做真实集成。
 
 ## 文档入口
 
-- 执行真源：`AGENTS.md`、`docs/project/project-brief.md`、`docs/phases/stage-2-deliverables.md`、`docs/decisions/current-task.md`、`docs/decisions/task-status.md`
+- 执行真源：`AGENTS.md`、`docs/project/project-brief.md`、`docs/phases/stage-2-deliverables.md`、`docs/decisions/task-board.md`
 - 运行态、执行记录与长期决策：`docs/decisions/solution-proposal.md`、`docs/decisions/execution-checklist.md`、`docs/decisions/review-notes.md`、`docs/decisions/decision-log.md`
 - 代理入口：`CLAUDE.md`、`docs/agents/claude-solution-reviewer.md`、`docs/agents/codex-executor.md`
 - 全局背景与阶段基线：`docs/project/*.md`、`docs/demo/*.md`、`docs/phases/stage-1-deliverables.md`
@@ -18,4 +18,4 @@
 
 ## 协作方式
 
-人主要与 Claude 讨论，Claude 负责方案收敛与运行态文档维护，Codex 按真源执行允许范围内的修改并回写结果。
+人主要与 Claude 讨论，Claude 与 Codex 共同维护 `task-board.md`，双方按任务分工推进工作。

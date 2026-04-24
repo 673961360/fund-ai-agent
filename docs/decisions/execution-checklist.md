@@ -52,7 +52,7 @@ M3 最小闭环 - 基础设施补齐 + 无确认路径 Mock 串联
 
 ## 步骤5：运行态文件回写
 - [ ] 回写 review-notes.md
-- [ ] 回写 task-status.md
+- [ ] 回写 task-board.md
 
 ## 本轮禁止项
 - [ ] 不修改 docs/contracts/**

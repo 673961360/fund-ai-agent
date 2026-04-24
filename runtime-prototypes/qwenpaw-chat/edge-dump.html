@@ -1,0 +1,517 @@
+﻿<!DOCTYPE html>
+<html lang="en"><head>
+    <script type="module" src="/@vite/client"></script>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QwenPaw Prototype Chat</title>
+  <style type="text/css" data-vite-dev-id="D:/个人本地知识库/yfbcode/fund-ai/fund_ai_agent/runtime-prototypes/qwenpaw-chat/src/styles/chat.css">:root {
+  color-scheme: light;
+  font-family: "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #132238;
+  background:
+    radial-gradient(circle at top left, rgba(227, 186, 75, 0.26), transparent 28%),
+    radial-gradient(circle at top right, rgba(27, 104, 143, 0.18), transparent 30%),
+    linear-gradient(180deg, #f4efe2 0%, #edf3f6 52%, #e4edf2 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.chat-view {
+  width: min(1200px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 32px 0 48px;
+}
+
+.hero-panel,
+.card-panel,
+.error-banner {
+  border: 1px solid rgba(19, 34, 56, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 22px 60px rgba(26, 48, 76, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.hero-panel {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: 1.5fr 1fr;
+  padding: 28px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.hero-panel__eyebrow {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #9b6a1c;
+}
+
+.hero-panel h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.25rem);
+  line-height: 1;
+}
+
+.hero-panel__summary {
+  max-width: 58ch;
+  margin: 12px 0 0;
+  font-size: 1rem;
+  color: rgba(19, 34, 56, 0.76);
+}
+
+.hero-panel__meta {
+  display: grid;
+  gap: 12px;
+}
+
+.hero-panel__chip {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(19, 34, 56, 0.94), rgba(30, 56, 80, 0.92));
+  color: #f7f9fb;
+}
+
+.hero-panel__chip span {
+  display: block;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(247, 249, 251, 0.68);
+}
+
+.hero-panel__chip strong {
+  display: block;
+  margin-top: 6px;
+  word-break: break-all;
+}
+
+.error-banner {
+  margin-top: 18px;
+  padding: 16px 18px;
+  background: rgba(174, 50, 42, 0.1);
+  color: #7d1f19;
+}
+
+.error-banner strong,
+.error-banner p {
+  margin: 0;
+}
+
+.error-banner p {
+  margin-top: 6px;
+}
+
+.workspace-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.95fr);
+  margin-top: 18px;
+}
+
+.workspace-grid__sidebar {
+  display: grid;
+  gap: 18px;
+}
+
+.card-panel {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.message-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 640px;
+  padding: 20px;
+}
+
+.message-list__header,
+.status-panel__header,
+.chat-input__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.message-list__header h2,
+.status-panel__header h2,
+.auth-card__header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.message-list__header p,
+.status-panel__header p,
+.auth-card__header p {
+  margin: 4px 0 0;
+  color: rgba(19, 34, 56, 0.68);
+}
+
+.message-list__status,
+.status-pill {
+  min-width: 92px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.message-list__status {
+  background: rgba(19, 34, 56, 0.08);
+  color: #38526d;
+}
+
+.message-list__status[data-busy="true"] {
+  background: rgba(155, 106, 28, 0.18);
+  color: #8b5b12;
+}
+
+.status-pill[data-tone="ready"] {
+  background: rgba(36, 94, 64, 0.12);
+  color: #245e40;
+}
+
+.status-pill[data-tone="busy"] {
+  background: rgba(155, 106, 28, 0.18);
+  color: #8b5b12;
+}
+
+.status-pill[data-tone="warning"] {
+  background: rgba(142, 77, 24, 0.12);
+  color: #8e4d18;
+}
+
+.message-list__empty {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  padding: 28px;
+  text-align: center;
+  color: rgba(19, 34, 56, 0.7);
+}
+
+.message-list__empty p {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.message-list__empty span {
+  max-width: 30ch;
+  margin-top: 8px;
+}
+
+.message-list__items {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 18px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.message-bubble {
+  max-width: 88%;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: #f5f8fb;
+  animation: fade-up 180ms ease-out;
+}
+
+.message-bubble--user {
+  align-self: flex-end;
+  background: linear-gradient(180deg, #11314b, #1a4b69);
+  color: #f8fafc;
+}
+
+.message-bubble--assistant {
+  align-self: flex-start;
+  border: 1px solid rgba(19, 34, 56, 0.08);
+}
+
+.message-bubble--error {
+  border: 1px solid rgba(174, 50, 42, 0.18);
+  background: rgba(174, 50, 42, 0.08);
+}
+
+.message-bubble__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 0.78rem;
+  opacity: 0.84;
+}
+
+.message-bubble__content {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-bubble__streaming,
+.message-bubble__error {
+  display: inline-flex;
+  margin-top: 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.message-bubble__streaming::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  margin-left: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.status-panel,
+.auth-card {
+  padding: 20px;
+}
+
+.status-panel__list {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0 0;
+}
+
+.status-panel__list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(19, 34, 56, 0.08);
+}
+
+.status-panel__list div:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.status-panel__list dt {
+  color: rgba(19, 34, 56, 0.68);
+}
+
+.status-panel__list dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+}
+
+.status-panel__field {
+  margin-top: 18px;
+}
+
+.status-panel__label,
+.auth-card__label,
+.chat-input__label {
+  display: inline-block;
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+.status-panel__select,
+.auth-card__input,
+.chat-input__field {
+  width: 100%;
+  border: 1px solid rgba(19, 34, 56, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.status-panel__select,
+.auth-card__input {
+  min-height: 48px;
+  padding: 12px 14px;
+}
+
+.status-panel__select:focus,
+.auth-card__input:focus,
+.chat-input__field:focus {
+  outline: none;
+  border-color: rgba(17, 49, 75, 0.45);
+  box-shadow: 0 0 0 4px rgba(17, 49, 75, 0.08);
+}
+
+.status-panel__select:disabled,
+.auth-card__input:disabled,
+.chat-input__field:disabled {
+  background: rgba(235, 240, 244, 0.8);
+  cursor: not-allowed;
+}
+
+.status-panel__help,
+.auth-card__hint,
+.chat-input__hint {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: rgba(19, 34, 56, 0.62);
+}
+
+.auth-card__hint--warning {
+  color: #8e4d18;
+}
+
+.status-panel__actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.auth-card__submit {
+  width: 100%;
+  margin-top: 18px;
+}
+
+.chat-input {
+  padding: 20px;
+}
+
+.chat-input__field {
+  min-height: 144px;
+  resize: vertical;
+  padding: 16px 18px;
+}
+
+.chat-input__submit,
+.ghost-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-weight: 700;
+}
+
+.chat-input__submit {
+  background: linear-gradient(180deg, #9b6a1c, #7d5312);
+  color: #fff7e7;
+}
+
+.chat-input__submit:disabled,
+.ghost-button:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.ghost-button {
+  background: rgba(19, 34, 56, 0.08);
+  color: #24405d;
+}
+
+.ghost-button--warning {
+  background: rgba(174, 50, 42, 0.1);
+  color: #7d1f19;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 960px) {
+  .chat-view {
+    width: min(100vw - 24px, 1200px);
+    padding-top: 18px;
+  }
+
+  .hero-panel,
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .message-list {
+    min-height: 520px;
+  }
+}
+
+@media (max-width: 640px) {
+  .chat-view {
+    width: calc(100vw - 16px);
+    padding-bottom: 20px;
+  }
+
+  .hero-panel,
+  .message-list,
+  .status-panel,
+  .auth-card,
+  .chat-input,
+  .error-banner {
+    border-radius: 20px;
+    padding: 16px;
+  }
+
+  .message-list__header,
+  .status-panel__header,
+  .chat-input__footer,
+  .status-panel__actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .message-bubble {
+    max-width: 100%;
+  }
+
+  .status-pill {
+    width: 100%;
+  }
+}
+</style></head>
+  <body>
+    <div id="app" data-v-app=""><main class="chat-view"><section class="hero-panel"><div class="hero-panel__copy"><p class="hero-panel__eyebrow">Runtime Prototype</p><h1>QwenPaw console streaming chat</h1><p class="hero-panel__summary"> This sandbox validates the real QwenPaw console protocol without touching the mainline frontend or backend. </p></div><div class="hero-panel__meta"><div class="hero-panel__chip"><span>Protocol</span><strong>Agent Console SSE</strong></div><div class="hero-panel__chip"><span>Channel</span><strong>console</strong></div><div class="hero-panel__chip"><span>Target</span><strong>http://127.0.0.1:8088</strong></div></div></section><!--v-if--><section class="workspace-grid"><section class="message-list card-panel"><header class="message-list__header"><div><h2>Conversation</h2><p>Live tokens appear here as the upstream stream arrives.</p></div><span class="message-list__status" data-busy="false">Idle</span></header><div class="message-list__empty"><p>No messages yet.</p><span>Select an agent, confirm the local console connection, then send the first prompt to test the stream path.</span></div></section><aside class="workspace-grid__sidebar"><section class="card-panel status-panel"><header class="status-panel__header"><div><h2>Console status</h2><p>Connection, auth, and agent selection for this prototype.</p></div><span class="status-pill" data-tone="ready">Ready</span></header><dl class="status-panel__list"><div><dt>Authentication</dt><dd>Disabled</dd></div><div><dt>Selected agent</dt><dd>Default</dd></div><div><dt>Messages</dt><dd>0</dd></div><div><dt>Transport</dt><dd>fetch + SSE</dd></div></dl><div class="status-panel__field"><label class="status-panel__label" for="agent-select">Agent</label><select id="agent-select" class="status-panel__select" value="default"><option disabled="" value="">Select an agent</option><option value="default">Default</option><option value="QwenPaw_QA_Agent_0.2">QA Agent</option><option value="cLWBDT">聊天渠道问答Agent</option></select><p class="status-panel__help">default agent | - **名字：** *（挑个你喜欢的）* - **定位：** *（AI？机器人？使魔？机器里的幽灵？还是更怪的？）* - **风格：** *（你给人什么感觉？犀利？温暖？混乱？冷静？）* - **其他** *（用户设置的其他内容）*</p></div><div class="status-panel__actions"><button class="ghost-button ghost-button--warning" type="button" disabled=""> Stop </button><button class="ghost-button" type="button" disabled=""> Clear </button></div></section><!--v-if--><section class="chat-input card-panel"><label class="chat-input__label" for="chat-prompt">Prompt</label><textarea id="chat-prompt" class="chat-input__field" placeholder="Type a message for the local QwenPaw runtime..." rows="4" value=""></textarea><div class="chat-input__footer"><p class="chat-input__hint">Press Enter to send, Shift+Enter for a new line.</p><button class="chat-input__submit" type="button" disabled="">Send</button></div></section></aside></section></main></div>
+    <script type="module" src="/src/main.ts"></script>
+  
+
+</body></html>

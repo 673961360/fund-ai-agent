@@ -15,16 +15,18 @@
 - 归档原因：2026-04-23 M2 已退出，阶段切换至阶段 3
 
 ### DEC-20260423-002 Claude / Codex 职责分工
-- 状态：active
+- 状态：archived
 - 决策：Claude 负责方案收敛与运行态文档维护；Codex 负责按真源执行允许范围内的修改，并回写执行结果
 - 影响：方案收敛、执行落地、回写责任需要保持分工清晰，避免角色越位
 - 来源：`AGENTS.md`、`CLAUDE.md`、`docs/agents/claude-solution-reviewer.md`、`docs/agents/codex-executor.md`
+- 归档原因：2026-04-24 切换为共享任务看板模式，双方均可贡献 task-board.md 和更新运行态文件，严格分工取消。替代决策见 DEC-20260424-009
 
 ### DEC-20260423-003 current-task.md 是当前任务真源
-- 状态：active
+- 状态：archived
 - 决策：`docs/decisions/current-task.md` 是当前任务边界、允许修改文件与完成判定的直接真源；`docs/templates/current-task.template.md` 只是模板
 - 影响：未同步到 `current-task.md` 的任务，不应被视为稳定当前任务
 - 来源：`docs/agents/claude-solution-reviewer.md`、`docs/agents/codex-executor.md`
+- 归档原因：2026-04-24 切换为共享任务看板模式，`task-board.md` 替代 `current-task.md` 作为任务状态唯一真源。替代决策见 DEC-20260424-009
 
 ### DEC-20260423-004 当前阶段禁止真实集成
 - 状态：archived
@@ -34,10 +36,11 @@
 - 归档原因：2026-04-23 阶段切换至阶段 3，Mock-only HTTP/SSE handler 已允许
 
 ### DEC-20260423-005 运行态文件的更新责任
-- 状态：active
+- 状态：archived
 - 决策：形成新任务、新边界、新执行顺序、新验收共识时，需同步更新 `current-task.md`、`solution-proposal.md`、`execution-checklist.md`，必要时更新 `task-status.md`
 - 影响：会话历史不能替代运行态文件；运行态文件不同步时，应先修正真源再继续推进
 - 来源：`AGENTS.md`、`CLAUDE.md`、`docs/agents/claude-solution-reviewer.md`
+- 归档原因：2026-04-24 切换为共享任务看板模式，`task-board.md` 替代 `current-task.md` + `task-status.md` 作为任务状态唯一真源。替代决策见 DEC-20260424-009
 
 ### DEC-20260423-006 review-notes.md 与 decision-log.md 职责分离
 - 状态：active
@@ -122,3 +125,9 @@
 - 决策：TASK-20260423-006（M3 最小闭环）暂缓执行，优先创建 `runtime-prototypes/qwenpaw-chat/` 独立原型，验证前端直连 QwenPaw 的最小聊天闭环。原型是实验场，不是主线正式产品，私有协议不得写入主线文档
 - 影响：后续任务以原型验证为第一优先级；原型验证通过后再评估是否恢复 TASK-006 或调整主线方向
 - 来源：2026-04-24 用户决策
+
+### DEC-20260424-009 共享任务看板协作模式
+- 状态：active
+- 决策：Claude 与 Codex 均可读取和更新 `task-board.md` 及运行态文件（review-notes、decision-log、solution-proposal、execution-checklist）。`current-task.md` 和 `task-status.md` 已废弃，`task-board.md` 为任务状态唯一真源。严格分工取消，但真源优先级层次和冲突解决规则保持不变。
+- 影响：双方不再受 "Codex 只能改 runtime-prototypes" 限制；运行态文件新鲜度由推进工作的任一方负责维护；task-board.md 中的任务条目遵循 AGENTS.md §5.2 瘦身约定
+- 来源：AGENTS.md §5 更新、DEC-20260423-002 归档

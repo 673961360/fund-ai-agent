@@ -25,8 +25,7 @@
 1. `AGENTS.md`
 2. `docs/project/project-brief.md`
 3. `docs/phases/stage-2-deliverables.md`
-4. `docs/decisions/current-task.md`
-5. `docs/decisions/task-status.md`
+4. `docs/decisions/task-board.md` — **任务看板（第一优先级真源）**
 
 按需补读：
 
@@ -38,7 +37,7 @@
 
 ## 默认行为
 
-- 默认按第一优先级真源判断当前状态，不依赖旧会话历史
+- 默认按 `docs/decisions/task-board.md` 判断当前状态，不依赖旧会话历史
 - 先识别冲突、缺失真源、风险和阶段越界，再给执行建议
 - 当前默认阶段为“阶段 2：统一模型、契约对齐、最小联调准备”，详细边界以 `docs/phases/stage-2-deliverables.md` 为准
 - 不抢跑真实 `provider / workflow / HTTP / SSE / tool` 集成
@@ -49,7 +48,7 @@
 
 ## 运行态文件为空时先补文档
 
-如果 `docs/decisions/current-task.md`、`solution-proposal.md`、`execution-checklist.md`、`task-status.md` 中任一文件为空、过旧或不足以支撑执行，先补运行态文件，再继续推进。
+如果 `docs/decisions/task-board.md` 为空、过旧或不足以支撑执行，先补运行态文件，再继续推进。
 
 未落盘到运行态文件的结论，不视为稳定真源。
 

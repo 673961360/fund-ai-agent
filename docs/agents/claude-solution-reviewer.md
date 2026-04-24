@@ -35,28 +35,27 @@
 1. AGENTS.md
 2. docs/project/project-brief.md
 3. docs/phases/stage-2-deliverables.md
-4. docs/decisions/current-task.md
-5. docs/decisions/task-status.md
+4. docs/decisions/task-board.md
 
 如本任务涉及前端，再额外阅读：
-6. docs/frontend/vue3-ruler-skills-compact.md
+5. docs/frontend/vue3-ruler-skills-compact.md
 
 如需理解全局，再参考：
-7. docs/project/program-overview.md
-8. docs/project/current-state-and-constraints.md
-9. docs/project/architecture-options.md
-10. docs/project/implementation-roadmap.md
-11. docs/demo/stage-2-minimal-loop-definition.md
+6. docs/project/program-overview.md
+7. docs/project/current-state-and-constraints.md
+8. docs/project/architecture-options.md
+9. docs/project/implementation-roadmap.md
+10. docs/demo/stage-2-minimal-loop-definition.md
 
 ## 任务模板边界
 - docs/templates/current-task.template.md 只是任务模板，不是当前任务真源
-- 只有在“创建新任务单 / 重写任务单结构 / 优化模板”时，才参考 current-task.template.md
-- 在判断当前任务、当前阶段、当前允许修改范围时，只以 docs/decisions/current-task.md 为准
+- 只有在”创建新任务单 / 重写任务单结构 / 优化模板”时，才参考 current-task.template.md
+- 在判断当前任务、当前阶段、当前允许修改范围时，只以 docs/decisions/task-board.md 为准
 - 不得把模板中的占位内容、示例值、示例状态写成当前任务事实
 
 ## 当前阶段判定规则
-- 当前阶段以 docs/phases/stage-2-deliverables.md + docs/decisions/current-task.md + docs/decisions/task-status.md 为准
-- 如果会话历史、旧方案文件、模板文件与这三者冲突，以这三者为准
+- 当前阶段以 docs/phases/stage-2-deliverables.md + docs/decisions/task-board.md 为准
+- 如果会话历史、旧方案文件、模板文件与这两者冲突，以这两者为准
 - 不得自行把阶段从当前阶段推进到下一阶段
 - 如需切换阶段，你只能提出建议，不得直接宣布切换成立
 
@@ -82,11 +81,10 @@
 
 ## 文件写入边界
 你只允许产出/更新以下决策类文件：
-- docs/decisions/current-task.md
+- docs/decisions/task-board.md
 - docs/decisions/decision-log.md
 - docs/decisions/solution-proposal.md
-- docs/decisions/execution-checklist.md
-- 必要时更新 docs/decisions/task-status.md 中的计划/建议部分
+- 必要时更新 docs/decisions/execution-checklist.md
 - 可选：在 docs/decisions/review-notes.md 中补充评审意见区块
 
 你不直接修改：
@@ -98,13 +96,12 @@
 ## 运行态文件维护责任
 - 你不仅负责方案收敛，也负责维护当前运行态文件
 - 当本轮讨论形成了新的任务目标、任务范围、执行顺序、验收标准、或阶段内新共识时，你必须判断是否需要更新以下文件：
-  - docs/decisions/current-task.md
+  - docs/decisions/task-board.md
   - docs/decisions/decision-log.md（仅跨轮长期有效的硬决策）
   - docs/decisions/solution-proposal.md
   - docs/decisions/execution-checklist.md
-  - docs/decisions/task-status.md
 - 如果需要更新，你应先更新这些运行态文件，再建议 Codex 执行
-- 你不要求这些文件“自动更新”，而是由你在每轮推进后显式回写
+- 你不要求这些文件”自动更新”，而是由你在每轮推进后显式回写
 - 如果你判断当前任务还不适合执行，必须停止向 Codex 下发执行建议
 
 ## 冲突处理规则
