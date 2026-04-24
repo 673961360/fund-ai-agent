@@ -218,23 +218,35 @@ v0 的成功不以“功能数量”作为第一标准，而以“边界与可�
 
 当前处于：
 
-**阶段 2：统一模型、契约对齐、最小联调准备**
+**阶段 3：最小闭环跑通（Mock-Only）**
 
-阶段 2 的重点不是进入真实集成，而是：
+> 阶段 2 已完成（M2 已退出），历史阶段说明见下文。
 
-- 对齐统一模型
-- 对齐契约定义
-- 补齐状态枚举与状态流转
-- 细化 Tool Gateway / Workflow Adapter 契约
-- 为最小闭环联调做好文档与契约准备
+阶段 3 的重点是在不依赖真实 QwenPaw 的前提下，使用 MockRuntimeAdapter 打通最小可演示链路：
 
-当前阶段 `Decision Service` 仍仅以 `core/policies` 形式占位，不代表已经形成独立服务实现。
+- MockRuntimeAdapter 可接收请求并返回占位流事件
+- 前端可发起请求并接收 SSE 占位响应
+- `Request` 状态可从 `accepted` 流转至 `terminal`
+- 仍不接真实 `QwenPaw` / 真实工具 / 真实外部系统
 
-当前阶段的详细边界与交付物以：
+> 以下为阶段 2 的历史说明，仅供参考。
+>
+> 阶段 2 的重点是：
+>
+> - 对齐统一模型
+> - 对齐契约定义
+> - 补齐状态枚举与状态流转
+> - 细化 Tool Gateway / Workflow Adapter 契约
+> - 为最小闭环联调做好文档与契约准备
+>
+> 阶段 2 的详细边界与交付物历史基线见 `docs/phases/stage-2-deliverables.md`。
 
-`docs/phases/stage-2-deliverables.md`
+当前阶段的详细边界与交付物以以下文件为准：
 
-为准。
+- `AGENTS.md`
+- `docs/demo/stage-2-minimal-loop-definition.md`
+- `docs/project/milestones.md`
+- `docs/decisions/current-task.md`
 
 ---
 
@@ -244,10 +256,10 @@ v0 的成功不以“功能数量”作为第一标准，而以“边界与可�
 已完成：文档真源 + 骨架
 
 ### 阶段 2
-当前进行中：统一模型、契约对齐、最小联调准备
+已完成：统一模型、契约对齐、最小联调准备（M2 已退出）
 
 ### 阶段 3
-待进入：在不接 QwenPaw 真集成前提下，使用 MockRuntimeAdapter 做最小闭环联调
+当前进行中：在不接 QwenPaw 真集成前提下，使用 MockRuntimeAdapter 做最小闭环联调
 
 ### 阶段 4
 在 QwenPaw 协议确认后，再接入 QwenPawAdapter 真实实现
@@ -262,12 +274,12 @@ v0 的成功不以“功能数量”作为第一标准，而以“边界与可�
 
 ## 11. 当前最重要的执行原则
 
-1. 不为了“快跑起来”破坏边界  
-2. 不为了“先看到效果”把 provider 私有协议暴露到上层  
-3. 不为了“方便”把业务规则写死在 prompt / runtime / 前端里  
+1. 不为了”快跑起来”破坏边界  
+2. 不为了”先看到效果”把 provider 私有协议暴露到上层  
+3. 不为了”方便”把业务规则写死在 prompt / runtime / 前端里  
 4. 不在未确认协议前抢跑真实集成  
 5. 不在阶段 1 提前实现未来阶段逻辑  
-6. 始终把“可演进、可治理、可替换”放在本期功能速度之前
+6. 始终把”可演进、可治理、可替换”放在本期功能速度之前
 
 ---
 
@@ -277,10 +289,12 @@ v0 的成功不以“功能数量”作为第一标准，而以“边界与可�
 
 1. `AGENTS.md`
 2. `docs/project/project-brief.md`
-3. `docs/phases/stage-2-deliverables.md`
-4. `docs/frontend/vue3-ruler-skills-compact.md`（涉及前端任务时必读）
-5. 当前阶段涉及的 contracts 文档
-6. 当前阶段涉及的 architecture / integration 文档
+3. `docs/demo/stage-2-minimal-loop-definition.md`
+4. `docs/project/milestones.md`
+5. `docs/decisions/current-task.md`
+6. `docs/frontend/vue3-ruler-skills-compact.md`（涉及前端任务时必读）
+7. 当前阶段涉及的 contracts 文档
+8. 当前阶段涉及的 architecture / integration 文档
 
 ---
 

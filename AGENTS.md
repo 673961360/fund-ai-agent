@@ -18,18 +18,22 @@
 
 当前默认阶段为：
 
-**阶段 2：统一模型、契约对齐、最小联调准备**
+**阶段 3：最小闭环跑通（Mock-Only）**
+
+> 阶段 2 已完成（TASK-20260423-003 + TASK-20260423-004 均已完成，M2 已退出），详见 `docs/project/milestones.md`。
 
 当前阶段重点：
 
-- 统一 `Session / Message / Request / StreamEvent / Confirmation` 模型
-- 补齐状态枚举与状态流转约束
-- 细化 `Tool Gateway / Workflow Adapter / Runtime Adapter` 契约
-- 定义最小闭环联调路径，但不落真实集成
+- 使用 `MockRuntimeAdapter` 打通最小可演示链路
+- 前端可发起请求并接收 SSE 占位响应
+- `Request` 状态可从 `accepted` 流转至 `terminal`
+- 仍不依赖真实 `QwenPaw` / 真实工具 / 真实外部系统
 
 当前阶段详细边界以以下文件为准：
 
-- `docs/phases/stage-2-deliverables.md`
+- `docs/phases/stage-2-deliverables.md`（阶段 2 已完成的历史基线）
+- `docs/demo/stage-2-minimal-loop-definition.md`（最小闭环路径定义）
+- `docs/project/milestones.md`（里程碑状态，M2 已退出，M3 进行中）
 
 项目总体推进节奏与版本发布口径以以下文件为准：
 
@@ -48,10 +52,12 @@
 
 1. `AGENTS.md`
 2. `docs/project/project-brief.md`
-3. `docs/phases/stage-2-deliverables.md`
-4. `docs/decisions/current-task.md`
-5. `docs/decisions/task-status.md`
-6. `docs/frontend/vue3-ruler-skills-compact.md`（仅前端任务强制）
+3. `docs/phases/stage-2-deliverables.md`（阶段 2 历史基线）
+4. `docs/demo/stage-2-minimal-loop-definition.md`（最小闭环路径）
+5. `docs/project/milestones.md`（里程碑状态）
+6. `docs/decisions/current-task.md`
+7. `docs/decisions/task-status.md`
+8. `docs/frontend/vue3-ruler-skills-compact.md`（仅前端任务强制）
 
 ### 3.2 第二优先级参考
 
@@ -134,7 +140,8 @@
 新会话启动时，至少重新读取：
 
 - `AGENTS.md`
-- `docs/phases/stage-2-deliverables.md`
+- `docs/demo/stage-2-minimal-loop-definition.md`
+- `docs/project/milestones.md`
 - `docs/decisions/current-task.md`
 - `docs/decisions/task-status.md`
 - 本轮所需的其他真源文件
