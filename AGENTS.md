@@ -29,6 +29,13 @@
 - `Request` 状态可从 `accepted` 流转至 `terminal`
 - 仍不依赖真实 `QwenPaw` / 真实工具 / 真实外部系统
 
+**原型旁路（Prototype Side-Track）**：
+
+- `runtime-prototypes/` 目录为授权的原型实验场，允许在其中直连真实 QwenPaw API 做轻量验证
+- 原型目录与主线架构物理隔离，私有协议不得写入主线 `docs/contracts/`、`frontend/`、`backend/`
+- 原型验证通过后可反哺主线，但代码不直接进入主线
+- 原型旁路不改变阶段 3 的 Mock-Only 边界，主线任务仍以 Mock-Only 推进
+
 当前阶段详细边界以以下文件为准：
 
 - `docs/phases/stage-2-deliverables.md`（阶段 2 已完成的历史基线）
@@ -122,8 +129,29 @@
 2. Claude 回写 `current-task.md / solution-proposal.md / execution-checklist.md`，必要时更新 `task-status.md`
 2.5 Claude 执行 `docs/decisions/publish-checklist.md` 自检，确认全仓真源一致、无残留冲突后，方可将任务状态设为 approved_for_execution
 3. Codex 读取真源与运行态文件，执行允许范围内的修改
-4. Codex 回写 `review-notes.md` 与 `task-status.md`
-5. 再进入下一轮方案收敛或执行
+4. Codex 仅产出代码与配置，不回写任何运行态文件
+5. Claude 判断完成，自行更新 `task-status.md` 与 `review-notes.md`
+6. 再进入下一轮方案收敛或执行
+
+### 5.1 Codex 默认执行规则（固化）
+
+以下规则已在 AGENTS.md 层面固化，任务文件无需重复声明：
+
+- **Codex 只能创建或修改 `runtime-prototypes/**` 下的文件** — 该目录外的任何文件都是只读的
+- **Codex 不修改任何 `docs/` 目录下的文件** — 运行态文件（task-status、review-notes、decision-log 等）由 Claude 负责更新
+- **Codex 不修改任何根目录文件**（CLAUDE.md、README.md、AGENTS.md 等）
+- Codex 完成执行后，由 Claude 根据实际产出自行判定是否完成、是否需要修订
+- 如需在任务中额外约束（例如允许修改某个特定文档），由 `current-task.md` 显式声明覆盖上述默认规则
+
+### 5.2 任务文件瘦身约定
+
+`current-task.md` 应聚焦于"做什么"，不再重复以下内容：
+- 禁止修改文件列表（已在 AGENTS.md §5.1 固化）
+- Codex 运行态回写责任（已由 Claude 承担）
+- 真源优先级清单（已在 AGENTS.md §3 固化）
+- 本轮不做 / 风险提示 / 验收关注点 / 交接说明（由 Claude 在会话中掌握，不写入任务文件）
+
+保留项：任务 ID/名称/状态、目标描述、文件清单（本轮只做）、技术要点、完成判定（1-2 条 outcome）
 
 ---
 

@@ -110,3 +110,15 @@
 - 决策：docs/project/project-brief.md 第 9 节不再指向 stage-2-deliverables.md 为当前边界，改为指向 AGENTS.md + stage-2-minimal-loop-definition.md + milestones.md + current-task.md；第 10 节阶段关系已更新为阶段 2 已完成/阶段 3 进行中；docs/project/milestones.md M2/M3 小节标题与第 7 节当前里程碑已同步更新
 - 影响：全仓不再有"阶段 2 当前进行中"的活跃声明，阶段 3 已成为唯一活跃阶段口径
 - 来源：TASK-20260423-006 REVISE 第三轮反馈
+
+### DEC-20260424-008 原型验证分两步走
+- 状态：active
+- 决策：TASK-007 原型验证拆分为两个阶段：Phase 1 = 前端直连 QwenPaw 聊天；Phase 2 = 聊天结果反向驱动工作台 UI 状态（原型内新建工作台页面，非主线）。工作台为分屏布局（可折叠左侧导航栏 + 右侧内容区），最小面板集为 DataPanel / ConfigPanel / LogPanel。指令解析机制（QwenPaw 结构化输出 vs 前端规则匹配）待定，通过 command-bus 实现指令来源无关层
+- 影响：Phase 1 完成后才能确定 Phase 2 指令解析方案；工作台页面完全在原型目录内，不触碰主线 frontend/
+- 来源：2026-04-24 用户决策
+
+### DEC-20260424-007 M3 主线任务暂缓，优先推进原型验证
+- 状态：active
+- 决策：TASK-20260423-006（M3 最小闭环）暂缓执行，优先创建 `runtime-prototypes/qwenpaw-chat/` 独立原型，验证前端直连 QwenPaw 的最小聊天闭环。原型是实验场，不是主线正式产品，私有协议不得写入主线文档
+- 影响：后续任务以原型验证为第一优先级；原型验证通过后再评估是否恢复 TASK-006 或调整主线方向
+- 来源：2026-04-24 用户决策
