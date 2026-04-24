@@ -120,6 +120,7 @@
 
 1. 人与 Claude 讨论，推进方案、边界和任务定义
 2. Claude 回写 `current-task.md / solution-proposal.md / execution-checklist.md`，必要时更新 `task-status.md`
+2.5 Claude 执行 `docs/decisions/publish-checklist.md` 自检，确认全仓真源一致、无残留冲突后，方可将任务状态设为 approved_for_execution
 3. Codex 读取真源与运行态文件，执行允许范围内的修改
 4. Codex 回写 `review-notes.md` 与 `task-status.md`
 5. 再进入下一轮方案收敛或执行
