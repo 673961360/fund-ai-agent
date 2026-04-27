@@ -17,7 +17,7 @@ const props = withDefaults(defineProps<Props>(), {
 const containerRef = ref<HTMLElement | null>(null);
 
 watch(
-  () => props.messages.map((message) => `${message.id}:${message.content.length}:${message.status}`).join('|'),
+  () => props.messages.map((message) => serializeMessage(message)).join('|'),
   async () => {
     await nextTick();
     if (containerRef.value) {
@@ -26,6 +26,14 @@ watch(
   },
   { immediate: true },
 );
+
+function serializeMessage(message: ChatMessage): string {
+  const sectionsSignature = (message.sections ?? [])
+    .map((section) => `${section.id}:${section.kind}:${section.status}:${section.content.length}`)
+    .join(',');
+
+  return `${message.id}:${message.content.length}:${message.status}:${sectionsSignature}`;
+}
 </script>
 
 <template>
