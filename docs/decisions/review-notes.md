@@ -2,7 +2,7 @@
 
 ## 当前任务
 - 任务ID：TASK-20260424-007
-- 任务名称：Runtime Prototypes: QwenPaw 直连聊天页最小闭环
+- 任务名称：Runtime Prototypes: QwenPaw 直连聊天页界面能力补齐
 
 ---
 
@@ -436,3 +436,116 @@ M2 **全部满足**，可视为退出。
 
 - `runtime-prototypes/qwenpaw-chat/src/composables/use-qwenpaw-chat-session.ts` 在执行前已存在未提交修改，本轮未改动其逻辑。
 - `.env.local` 与真实 QwenPaw 服务的手工联调仍未执行，本轮验证范围仅覆盖类型检查与生产构建。
+
+---
+
+## TASK-20260424-007 QwenPaw Chat 行为对齐执行记录
+
+- 执行时间：2026-04-24
+- 执行人：Codex
+- 执行状态：review_pending
+- 执行结论：已按“行为对齐”口径完成 `runtime-prototypes/qwenpaw-chat` 的请求契约、会话状态、SSE 归并与消息渲染分层修正；原型页现已具备 `正式应答 / 思考过程 / 工具调用 / 工具结果` 的结构化展示基础。
+
+### 本次改动摘要
+
+1. 请求契约与会话语义对齐：
+   - `runtime-prototypes/shared/qwenpaw-client.ts` 的 `sendQwenPawChat` 改为只发送当前最新一条 `user message`
+   - 新增 per-conversation `session_id` 生成逻辑，不再默认复用静态 session
+   - `clearConversation`、切换 agent、后端 `clear_history` 后均会切到新的 conversation session
+
+2. 消息模型与流式归并重写：
+   - `runtime-prototypes/shared/types.ts` 为 `ChatMessage` 增加 `sections`
+   - `QwenPawStreamEvent` 增补 `content` / `data` / tool payload 类型
+   - `use-qwenpaw-chat-session.ts` 以 runtime `msg_id` 为主键，分别归并 `reasoning`、`message`、`plugin_call`、`plugin_call_output` 及同类 function/mcp tool 事件
+   - assistant 的 `content` 仅保留为“正式应答”镜像，不再承载全部流式真相
+
+3. assistant 气泡渲染升级：
+   - `MessageBubble.vue` 改为 assistant 分段渲染
+   - `正式应答` 作为主回复直接展示，`思考过程 / 工具调用 / 工具结果` 通过折叠块展示
+   - `ChatMessageList.vue` 的滚动跟踪改为覆盖 section 内容变化，避免只有 thinking/tool 更新时不自动滚动
+
+### 受影响文件
+
+- `runtime-prototypes/shared/types.ts`
+- `runtime-prototypes/shared/qwenpaw-client.ts`
+- `runtime-prototypes/qwenpaw-chat/src/composables/use-qwenpaw-chat-session.ts`
+- `runtime-prototypes/qwenpaw-chat/src/components/MessageBubble.vue`
+- `runtime-prototypes/qwenpaw-chat/src/components/ChatMessageList.vue`
+- `runtime-prototypes/qwenpaw-chat/src/styles/chat.css`
+- `docs/decisions/task-board.md`
+- `docs/decisions/review-notes.md`
+
+### 验证结果
+
+- `npm.cmd run typecheck`：通过
+- `npm.cmd run build`：通过
+- 127.0.0.1:8088 latest-only 烟测：同一 `session_id` 连续发送 `Reply with APPLE only.` / `Reply with BANANA only.`，返回结果分别为 `APPLE` / `BANANA`
+- 127.0.0.1:8088 tool/reasoning 烟测：可观测到 `reasoning`、`plugin_call`、`plugin_call_output` 与 `data` block；最终返回当前工作目录 `C:\\Users\\mowenbo\\.qwenpaw\\workspaces\\default`
+
+### 残留说明
+
+- 本轮未做浏览器内的人工点击验证，当前 UI 验证口径为 typecheck/build + 本地 API 烟测
+- 远端 stop 仍保持 best-effort；未扩展到 `chat_id` 级别的完整停止契约
+
+---
+
+## TASK-20260424-007 聊天工作区界面能力补齐执行记录
+
+- 执行时间：2026-04-27
+- 执行人：Codex
+- 执行状态：review_pending
+- 执行结论：已将 `runtime-prototypes/qwenpaw-chat` 从“单会话文本聊天原型”扩展为接近控制台语义的聊天工作区，补齐了历史聊天、刷新恢复、Markdown 正式应答、附件上传、语音录制发送，以及“发送即停止”的主按钮交互。
+
+### 本次改动摘要
+
+1. 聊天工作区与历史恢复：
+   - `runtime-prototypes/shared/types.ts` 补齐 `ChatSpec / ChatHistory / UploadedConsoleFile / RecordingState` 与富媒体消息块类型
+   - `runtime-prototypes/shared/qwenpaw-client.ts` 新增 `listChats / getChatHistory / createChat / deleteChat / uploadConsoleFile / reconnectQwenPawChat`
+   - `use-qwenpaw-chat-session.ts` 重构为工作区级状态管理，统一处理聊天列表、当前聊天、刷新恢复、删除切换和 running reconnect
+
+2. Markdown 与富媒体消息渲染：
+   - 新增 `runtime-prototypes/qwenpaw-chat/src/utils/render-markdown.ts`，用 `markdown-it` 处理正式应答 Markdown，并强制链接新开页签
+   - `MessageBubble.vue` 改为统一渲染 `text / image / file / audio`，assistant 分段继续保留 `正式应答 / 思考过程 / 工具调用 / 工具结果`
+   - `ChatMessageList.vue` 增加 skeleton、滚动跟随暂停与“回到底部”入口
+
+3. Composer 与多模态输入：
+   - `ChatInputBar.vue` 重构为真正的 composer，包含附件选择、上传队列、失败重试、删除、录音控制、录音预览与单一主按钮
+   - 上传前端限制为 10MB，并兼容上传结果中的 `filename / file_name`
+   - `MediaRecorder` 录音结果转为 `audio` 内容块，发送前可本地试听与移除
+
+4. 发送/停止与侧栏管理：
+   - `sendQwenPawChat` 从“文本单块请求”扩展为“多内容块单条 message 请求”，仍保持 latest-message-only 语义
+   - `stopQwenPawChat` 改为携带真实 `chat_id`，发送中主按钮直接切换为停止
+   - `ChatSidebar.vue` 改为“当前 Agent + 新建聊天 + 历史列表 + 登录 + 运行时配置”的工作区侧栏
+
+### 受影响文件
+
+- `runtime-prototypes/shared/types.ts`
+- `runtime-prototypes/shared/qwenpaw-client.ts`
+- `runtime-prototypes/shared/sse-handler.ts`
+- `runtime-prototypes/qwenpaw-chat/package.json`
+- `runtime-prototypes/qwenpaw-chat/package-lock.json`
+- `runtime-prototypes/qwenpaw-chat/src/composables/use-qwenpaw-chat-session.ts`
+- `runtime-prototypes/qwenpaw-chat/src/components/ChatInputBar.vue`
+- `runtime-prototypes/qwenpaw-chat/src/components/ChatMessageList.vue`
+- `runtime-prototypes/qwenpaw-chat/src/components/ChatSidebar.vue`
+- `runtime-prototypes/qwenpaw-chat/src/components/MessageBubble.vue`
+- `runtime-prototypes/qwenpaw-chat/src/views/ChatView.vue`
+- `runtime-prototypes/qwenpaw-chat/src/styles/chat.css`
+- `runtime-prototypes/qwenpaw-chat/src/utils/render-markdown.ts`
+- `docs/decisions/task-board.md`
+- `docs/decisions/review-notes.md`
+
+### 验证结果
+
+- `npm.cmd run typecheck`：通过
+- `npm.cmd run build`：通过
+- 127.0.0.1:8088 聊天管理烟测：创建聊天 -> 列表可见 -> 历史可读（空会话 0 条）-> 删除后列表消失
+- 127.0.0.1:8088 上传烟测：`/console/upload` 返回工作区媒体路径与上传文件名
+- 127.0.0.1:8088 历史结构核对：现有聊天历史可读出 `user / reasoning / assistant` 消息，并包含 Markdown 表格与长文本内容
+- 127.0.0.1:8088 fresh stream 烟测：一次新建聊天后的即时发送命中 `response.failed (MODEL_EXECUTION_FAILED)`；该情况下历史仅落盘已提交的 `user` 消息，前端需依赖流式错误态而非历史回放
+
+### 残留说明
+
+- 本轮未做浏览器内人工点击验证，尤其未实测 `MediaRecorder`、Markdown 增量渲染体验、移动端布局与“发送即停止”的整套交互
+- 远端 stop 已切到 `chat_id` 契约，但尚未针对一个稳定的长耗时 running chat 做端到端停止烟测
