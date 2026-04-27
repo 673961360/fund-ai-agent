@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { ChatMessage, ChatMessageSection } from '@proto-shared/types';
+import { renderMarkdown } from '@/utils/render-markdown';
+import type { ChatMessage, ChatMessageContentBlock, ChatMessageSection } from '@proto-shared/types';
 
 interface Props {
   message: ChatMessage;
@@ -23,6 +24,10 @@ const roleLabel = computed(() => {
     return '系统';
   }
 
+  if (props.message.role === 'tool') {
+    return '工具';
+  }
+
   return '用户';
 });
 
@@ -34,21 +39,23 @@ const timeLabel = computed(() =>
 );
 
 const assistantSections = computed(() => props.message.sections ?? []);
-
 const answerSections = computed(() =>
   assistantSections.value.filter((section) => section.kind === 'answer' && hasSectionContent(section)),
 );
-
 const detailSections = computed(() =>
   assistantSections.value.filter((section) => section.kind !== 'answer' && hasSectionContent(section)),
 );
-
+const assistantMediaBlocks = computed(() => props.message.contentBlocks.filter((block) => block.type !== 'text'));
+const primaryContentBlocks = computed(() =>
+  props.message.role === 'assistant' ? props.message.contentBlocks.filter((block) => block.type !== 'text') : props.message.contentBlocks,
+);
 const showAssistantFallback = computed(
   () => props.message.role === 'assistant' && props.message.content.trim().length > 0 && answerSections.value.length === 0,
 );
-
 const hasStructuredAssistantContent = computed(
-  () => props.message.role === 'assistant' && (answerSections.value.length > 0 || detailSections.value.length > 0),
+  () =>
+    props.message.role === 'assistant' &&
+    (answerSections.value.length > 0 || detailSections.value.length > 0 || assistantMediaBlocks.value.length > 0),
 );
 
 function hasSectionContent(section: ChatMessageSection): boolean {
@@ -62,6 +69,15 @@ function buildSectionSummary(section: ChatMessageSection): string {
 
   return section.title;
 }
+
+function renderSectionMarkdown(section: ChatMessageSection): string {
+  return renderMarkdown(section.content);
+}
+
+function renderFallbackMarkdown(): string {
+  return renderMarkdown(props.message.content);
+}
+
 </script>
 
 <template>
@@ -78,7 +94,7 @@ function buildSectionSummary(section: ChatMessageSection): string {
         class="message-bubble__section message-bubble__section--answer"
       >
         <div class="message-bubble__section-label">{{ section.title }}</div>
-        <pre class="message-bubble__section-content">{{ section.content }}</pre>
+        <div class="message-bubble__markdown" v-html="renderSectionMarkdown(section)" />
       </section>
 
       <section
@@ -86,8 +102,29 @@ function buildSectionSummary(section: ChatMessageSection): string {
         class="message-bubble__section message-bubble__section--answer message-bubble__section--fallback"
       >
         <div class="message-bubble__section-label">正式应答</div>
-        <pre class="message-bubble__section-content">{{ message.content }}</pre>
+        <div class="message-bubble__markdown" v-html="renderFallbackMarkdown()" />
       </section>
+
+      <div v-if="assistantMediaBlocks.length > 0" class="message-bubble__content-stack">
+        <template v-for="contentBlock in assistantMediaBlocks" :key="contentBlock.id">
+          <img
+            v-if="contentBlock.type === 'image'"
+            class="message-bubble__image"
+            :src="contentBlock.imageUrl"
+            :alt="contentBlock.filename || 'assistant image'"
+          />
+          <a
+            v-else-if="contentBlock.type === 'file'"
+            class="message-bubble__file"
+            :href="contentBlock.fileUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {{ contentBlock.filename || '下载文件' }}
+          </a>
+          <audio v-else-if="contentBlock.type === 'audio'" class="message-bubble__audio" controls :src="contentBlock.dataUrl" />
+        </template>
+      </div>
 
       <details v-for="section in detailSections" :key="section.id" class="message-bubble__details">
         <summary class="message-bubble__summary">
@@ -104,7 +141,28 @@ function buildSectionSummary(section: ChatMessageSection): string {
       </p>
     </div>
 
-    <p v-else class="message-bubble__content">{{ message.content || ' ' }}</p>
+    <div v-else class="message-bubble__content-stack">
+      <template v-for="contentBlock in primaryContentBlocks" :key="contentBlock.id">
+        <p v-if="contentBlock.type === 'text'" class="message-bubble__content">{{ contentBlock.text }}</p>
+        <img
+          v-else-if="contentBlock.type === 'image'"
+          class="message-bubble__image"
+          :src="contentBlock.imageUrl"
+          :alt="contentBlock.filename || 'uploaded image'"
+        />
+        <a
+          v-else-if="contentBlock.type === 'file'"
+          class="message-bubble__file"
+          :href="contentBlock.fileUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {{ contentBlock.filename || '下载文件' }}
+        </a>
+        <audio v-else-if="contentBlock.type === 'audio'" class="message-bubble__audio" controls :src="contentBlock.dataUrl" />
+      </template>
+      <p v-if="primaryContentBlocks.length === 0" class="message-bubble__content">{{ message.content || ' ' }}</p>
+    </div>
 
     <span v-if="message.status === 'streaming'" class="message-bubble__streaming">生成中</span>
     <span v-else-if="message.status === 'error'" class="message-bubble__error">请求失败</span>

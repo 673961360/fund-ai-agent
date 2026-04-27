@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
+import ChatHeader from '@/components/ChatHeader.vue';
 import ChatInputBar from '@/components/ChatInputBar.vue';
 import ChatMessageList from '@/components/ChatMessageList.vue';
 import ChatSidebar from '@/components/ChatSidebar.vue';
-import ChatHeader from '@/components/ChatHeader.vue';
 import { useQwenPawAgents } from '@/composables/use-qwenpaw-agents';
 import { useQwenPawAuth } from '@/composables/use-qwenpaw-auth';
 import { useQwenPawChatSession } from '@/composables/use-qwenpaw-chat-session';
@@ -37,15 +37,35 @@ const {
   selectAgent,
 } = useQwenPawAgents();
 const {
-  clearConversation,
+  activeChat,
+  activeChatId,
+  activeChatStatus,
+  addPendingFiles,
+  canRecord,
+  canSubmit,
+  chatList,
+  createNewConversation,
+  deleteChatById,
+  deletingChatId,
   draft,
   errorMessage: chatErrorMessage,
   hasMessages,
+  hasPendingUploadsInFlight,
+  isLoadingChats,
+  isLoadingHistory,
   isSending,
   messages,
+  openChat,
+  pendingUploads,
+  recordingState,
+  removePendingUpload,
+  retryPendingUpload,
   sendDraft,
   setActiveAgent,
+  startRecording,
+  stopRecordingCapture,
   stopStreaming,
+  cancelRecording,
 } = useQwenPawChatSession();
 
 const loginForm = reactive({
@@ -62,13 +82,15 @@ const isAuthReady = computed(
   () => !authState.value.isLoading && (!authState.value.enabled || authState.value.valid),
 );
 const requiresLogin = computed(() => authState.value.enabled && !authState.value.valid);
-const isChatDisabled = computed(
+const isComposerDisabled = computed(
   () =>
     !isAuthReady.value ||
     areAgentsLoading.value ||
     !selectedAgentId.value ||
     isSubmitting.value ||
-    isSending.value,
+    isLoadingChats.value ||
+    isLoadingHistory.value ||
+    recordingState.value.status === 'processing',
 );
 const isConfigBusy = computed(
   () => authState.value.isLoading || areAgentsLoading.value || isSubmitting.value || isSending.value,
@@ -90,8 +112,16 @@ const conversationStatusLabel = computed(() => {
     return '异常';
   }
 
-  if (isSending.value) {
+  if (isLoadingHistory.value || isLoadingChats.value) {
+    return '加载中';
+  }
+
+  if (isSending.value || activeChatStatus.value === 'running') {
     return '生成中';
+  }
+
+  if (activeChatStatus.value === 'interrupted') {
+    return '已中断';
   }
 
   if (requiresLogin.value) {
@@ -105,11 +135,11 @@ const conversationStatusLabel = computed(() => {
   return '就绪';
 });
 const conversationStatusTone = computed(() => {
-  if (combinedErrorMessage.value) {
+  if (combinedErrorMessage.value || activeChatStatus.value === 'interrupted') {
     return 'error' as const;
   }
 
-  if (isSending.value) {
+  if (isSending.value || isLoadingHistory.value || isLoadingChats.value) {
     return 'busy' as const;
   }
 
@@ -119,38 +149,42 @@ const conversationStatusTone = computed(() => {
 
   return 'idle' as const;
 });
-const conversationTitle = 'QwenPaw Chat';
+const conversationTitle = computed(() => activeChat.value?.name || (selectedAgentId.value ? '新聊天' : 'QwenPaw Chat'));
 const currentAgentName = computed(() => selectedAgent.value?.name || '未选择 Agent');
 const emptyStateDescription = computed(() => {
   if (requiresLogin.value) {
     return '先登录，再开始聊天。';
   }
 
-  if (areAgentsLoading.value) {
-    return '正在加载 Agent。';
+  if (areAgentsLoading.value || isLoadingChats.value) {
+    return '正在加载 Agent 与历史聊天。';
+  }
+
+  if (isLoadingHistory.value) {
+    return '正在恢复当前会话。';
   }
 
   if (!selectedAgentId.value) {
     return '先在右侧选择 Agent。';
   }
 
-  return '发送第一条消息。';
+  return '新聊天会在首次发送后创建历史条目。';
 });
 const inputPlaceholder = computed(() => {
   if (requiresLogin.value) {
     return '请先登录';
   }
 
-  if (areAgentsLoading.value) {
-    return '正在加载 Agent';
+  if (areAgentsLoading.value || isLoadingChats.value) {
+    return '正在加载 Agent 和历史聊天';
   }
 
   if (!selectedAgentId.value) {
     return '选择 Agent 后开始聊天';
   }
 
-  if (isSending.value) {
-    return '等待当前回复完成';
+  if (recordingState.value.status === 'recording') {
+    return '录音中...';
   }
 
   return `给 ${selectedAgent.value?.name || 'QwenPaw'} 发送消息`;
@@ -160,23 +194,27 @@ const inputHelperText = computed(() => {
     return '右侧登录后可继续';
   }
 
-  if (areAgentsLoading.value) {
-    return '加载 Agent 中';
+  if (hasPendingUploadsInFlight.value) {
+    return '正在上传附件，请稍候。';
   }
 
-  if (!selectedAgentId.value) {
-    return '先选择 Agent';
+  if (recordingState.value.status === 'recording') {
+    return '点击“结束录音”后会把音频加入待发送区。';
+  }
+
+  if (recordingState.value.status === 'processing') {
+    return '正在处理录音，请稍候。';
   }
 
   if (isSending.value) {
-    return '正在生成回复';
+    return '再次点击发送按钮即可终止当前流。';
   }
 
   if (combinedErrorMessage.value) {
-    return '上次请求失败，可直接重试';
+    return '上次请求失败；当前输入区已保留可重试内容。';
   }
 
-  return 'Enter 发送，Shift + Enter 换行';
+  return 'Enter 发送，Shift + Enter 换行。';
 });
 
 function syncRuntimeConfig(config: QwenPawClientConfig = getQwenPawClientConfig()): void {
@@ -207,8 +245,16 @@ function updateRuntimeConfigField(field: keyof RuntimeConfigFormState, value: st
 }
 
 async function refreshRuntimeContext(): Promise<void> {
-  clearConversation();
   await initialize();
+  if (!isAuthReady.value) {
+    return;
+  }
+
+  await loadAgents(token.value);
+  await setActiveAgent(selectedAgentId.value, {
+    token: token.value,
+    force: true,
+  });
 }
 
 async function handleSaveConfig(): Promise<void> {
@@ -274,10 +320,67 @@ async function handleLogin(): Promise<void> {
   }
 
   loginForm.password = '';
+  await loadAgents(token.value);
+  await setActiveAgent(selectedAgentId.value, {
+    token: token.value,
+    force: true,
+  });
 }
 
 function handleAgentSelect(agentId: string): void {
   selectAgent(agentId);
+}
+
+function handleNewConversation(): void {
+  createNewConversation();
+}
+
+function handleOpenChat(chatId: string): void {
+  void openChat(chatId, {
+    agentId: selectedAgentId.value,
+    token: token.value,
+    force: true,
+  });
+}
+
+function handleDeleteChat(chatId: string): void {
+  void deleteChatById(chatId, {
+    agentId: selectedAgentId.value,
+    token: token.value,
+  });
+}
+
+function handleAddFiles(files: File[]): void {
+  void addPendingFiles({
+    agentId: selectedAgentId.value,
+    token: token.value,
+    files,
+  });
+}
+
+function handleRetryUpload(uploadId: string): void {
+  void retryPendingUpload({
+    agentId: selectedAgentId.value,
+    token: token.value,
+    uploadId,
+  });
+}
+
+function handleStartRecording(): void {
+  void startRecording();
+}
+
+function createRuntimeConfigForm(config: QwenPawClientConfig): RuntimeConfigFormState {
+  return {
+    apiBaseUrl: config.apiBaseUrl,
+    channel: config.channel,
+    model: config.model,
+    userId: config.userId,
+  };
+}
+
+function normalizeText(value: string): string {
+  return value.trim();
 }
 
 onMounted(() => {
@@ -294,6 +397,7 @@ watch(
     }
 
     reset();
+    void setActiveAgent(null, { force: true });
   },
   { immediate: true },
 );
@@ -301,23 +405,17 @@ watch(
 watch(
   selectedAgentId,
   (agentId) => {
-    setActiveAgent(agentId);
+    if (!isAuthReady.value) {
+      return;
+    }
+
+    void setActiveAgent(agentId, {
+      token: token.value,
+      force: true,
+    });
   },
   { immediate: true },
 );
-
-function createRuntimeConfigForm(config: QwenPawClientConfig): RuntimeConfigFormState {
-  return {
-    apiBaseUrl: config.apiBaseUrl,
-    channel: config.channel,
-    model: config.model,
-    userId: config.userId,
-  };
-}
-
-function normalizeText(value: string): string {
-  return value.trim();
-}
 </script>
 
 <template>
@@ -332,15 +430,30 @@ function normalizeText(value: string): string {
           :error-message="combinedErrorMessage || ''"
         />
 
-        <ChatMessageList :messages="messages" :empty-description="emptyStateDescription" />
+        <ChatMessageList
+          :messages="messages"
+          :loading="isLoadingHistory"
+          :empty-description="emptyStateDescription"
+        />
 
         <ChatInputBar
           v-model="draft"
           :busy="isSending"
-          :disabled="isChatDisabled"
+          :disabled="isComposerDisabled"
+          :can-submit="canSubmit"
+          :can-record="canRecord"
+          :pending-uploads="pendingUploads"
+          :recording-state="recordingState"
           :placeholder="inputPlaceholder"
           :helper-text="inputHelperText"
           @submit="handleSendDraft"
+          @stop="handleStop"
+          @add-files="handleAddFiles"
+          @retry-upload="handleRetryUpload"
+          @remove-upload="removePendingUpload"
+          @start-recording="handleStartRecording"
+          @stop-recording="stopRecordingCapture"
+          @cancel-recording="cancelRecording"
         />
       </section>
 
@@ -349,7 +462,6 @@ function normalizeText(value: string): string {
         :selected-agent-id="selectedAgentId"
         :are-agents-loading="areAgentsLoading"
         :is-sending="isSending"
-        :has-messages="hasMessages"
         :requires-login="requiresLogin"
         :has-users="hasUsers"
         :is-submitting="isSubmitting"
@@ -361,9 +473,15 @@ function normalizeText(value: string): string {
         :runtime-config="runtimeConfigForm"
         :api-base-url-error-message="apiBaseUrlErrorMessage"
         :config-feedback-message="configFeedbackMessage"
+        :chat-list="chatList"
+        :active-chat-id="activeChatId"
+        :is-loading-chats="isLoadingChats"
+        :is-loading-history="isLoadingHistory"
+        :deleting-chat-id="deletingChatId"
         @select-agent="handleAgentSelect"
-        @stop="handleStop"
-        @clear="clearConversation"
+        @new-chat="handleNewConversation"
+        @open-chat="handleOpenChat"
+        @delete-chat="handleDeleteChat"
         @login="handleLogin"
         @toggle-config="toggleRuntimeConfig"
         @update:username="updateLoginField('username', $event)"

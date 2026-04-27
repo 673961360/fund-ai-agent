@@ -275,15 +275,20 @@ function extractDone(value: unknown): boolean {
   }
 
   const record = value as Record<string, unknown>;
-  if (record.done === true) {
+
+  if (
+    typeof record.object === 'string' &&
+    record.object === 'response' &&
+    isTerminalStatus(record.status)
+  ) {
     return true;
   }
 
-  if (typeof record.object === 'string' && record.object === 'response' && isTerminalStatus(record.status)) {
-    return true;
-  }
-
-  if (typeof record.status === 'string') {
+  if (
+    typeof record.object === 'string' &&
+    record.object === 'response' &&
+    typeof record.status === 'string'
+  ) {
     const normalized = record.status.toLowerCase();
     if (normalized === 'done' || normalized === 'finished') {
       return true;

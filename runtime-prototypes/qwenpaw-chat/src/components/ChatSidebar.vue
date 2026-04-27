@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import type { RuntimeConfigFormState } from '@/types/chat-ui';
-import type { QwenPawAgentSummary } from '@proto-shared/types';
+import type { ChatSpec, QwenPawAgentSummary } from '@proto-shared/types';
 
 interface Props {
   agents: QwenPawAgentSummary[];
   selectedAgentId: string | null;
   areAgentsLoading: boolean;
   isSending: boolean;
-  hasMessages: boolean;
   requiresLogin: boolean;
   hasUsers: boolean;
   isSubmitting: boolean;
@@ -19,14 +18,20 @@ interface Props {
   runtimeConfig: RuntimeConfigFormState;
   apiBaseUrlErrorMessage: string;
   configFeedbackMessage: string;
+  chatList: ChatSpec[];
+  activeChatId: string | null;
+  isLoadingChats: boolean;
+  isLoadingHistory: boolean;
+  deletingChatId: string | null;
 }
 
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
   'select-agent': [agentId: string];
-  stop: [];
-  clear: [];
+  'new-chat': [];
+  'open-chat': [chatId: string];
+  'delete-chat': [chatId: string];
   login: [];
   'toggle-config': [];
   'update:username': [value: string];
@@ -71,10 +76,20 @@ function updateModel(event: Event): void {
 function updateUserId(event: Event): void {
   emit('update:userId', (event.target as HTMLInputElement).value);
 }
+
+function formatChatTime(value: string): string {
+  const date = new Date(value);
+  return date.toLocaleString([], {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 </script>
 
 <template>
-  <aside class="chat-sidebar" aria-label="聊天辅助控制区">
+  <aside class="chat-sidebar" aria-label="聊天控制面板">
     <div class="chat-sidebar__block">
       <label class="chat-sidebar__label" for="agent-select">当前 Agent</label>
       <select
@@ -91,23 +106,55 @@ function updateUserId(event: Event): void {
       </select>
     </div>
 
-    <div class="chat-sidebar__actions">
+    <div class="chat-sidebar__block">
       <button
-        class="secondary-button"
+        class="secondary-button secondary-button--accent chat-sidebar__wide-button"
         type="button"
-        :disabled="props.isSending || !props.hasMessages"
-        @click="emit('clear')"
+        :disabled="props.isSending || !props.selectedAgentId"
+        @click="emit('new-chat')"
       >
-        清空会话
+        新建聊天
       </button>
-      <button
-        class="secondary-button secondary-button--warning"
-        type="button"
-        :disabled="!props.isSending || !props.selectedAgentId"
-        @click="emit('stop')"
-      >
-        停止生成
-      </button>
+    </div>
+
+    <div class="chat-sidebar__history">
+      <div class="chat-sidebar__history-header">
+        <span class="chat-sidebar__label">历史聊天</span>
+        <span v-if="props.isLoadingChats" class="chat-sidebar__muted">加载中</span>
+      </div>
+
+      <div v-if="props.chatList.length === 0" class="chat-sidebar__history-empty">
+        <p>{{ props.selectedAgentId ? '暂无历史聊天' : '先选择 Agent' }}</p>
+        <span>刷新后会自动恢复上次打开的会话。</span>
+      </div>
+
+      <ul v-else class="chat-sidebar__history-list">
+        <li v-for="chat in props.chatList" :key="chat.id" class="chat-sidebar__history-item">
+          <button
+            class="chat-sidebar__history-card"
+            :class="{ 'chat-sidebar__history-card--active': chat.id === props.activeChatId }"
+            type="button"
+            :disabled="props.isLoadingHistory || props.deletingChatId === chat.id"
+            @click="emit('open-chat', chat.id)"
+          >
+            <span class="chat-sidebar__history-title">{{ chat.name || 'New Chat' }}</span>
+            <span class="chat-sidebar__history-meta">
+              <span>{{ formatChatTime(chat.updated_at) }}</span>
+              <span v-if="chat.status === 'running'" class="chat-sidebar__history-status">运行中</span>
+            </span>
+          </button>
+          <button
+            class="chat-sidebar__history-delete"
+            type="button"
+            :disabled="props.isSending || props.deletingChatId === chat.id"
+            @click="emit('delete-chat', chat.id)"
+          >
+            {{ props.deletingChatId === chat.id ? '删除中' : '删除' }}
+          </button>
+        </li>
+      </ul>
+
+      <p class="chat-sidebar__history-note">删除只会移除聊天条目，不承诺清除底层 JSONSession 状态。</p>
     </div>
 
     <div v-if="props.requiresLogin" class="chat-sidebar__auth">
@@ -129,7 +176,7 @@ function updateUserId(event: Event): void {
         @input="updatePassword"
         @keyup.enter="emit('login')"
       />
-      <p v-if="!props.hasUsers" class="chat-sidebar__note">未检测到已注册用户。</p>
+      <p v-if="!props.hasUsers" class="chat-sidebar__note">未检测到已注册账号。</p>
       <button
         class="secondary-button secondary-button--accent chat-sidebar__auth-submit"
         type="button"
@@ -158,7 +205,7 @@ function updateUserId(event: Event): void {
           type="text"
           autocomplete="url"
           :value="props.runtimeConfig.apiBaseUrl"
-          placeholder="API 基址"
+          placeholder="API 地址"
           @input="updateApiBaseUrl"
         />
         <p v-if="props.apiBaseUrlErrorMessage" class="chat-sidebar__feedback chat-sidebar__feedback--error">
