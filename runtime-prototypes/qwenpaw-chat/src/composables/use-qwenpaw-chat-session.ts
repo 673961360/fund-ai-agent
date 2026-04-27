@@ -14,6 +14,7 @@ import {
   updateChat,
   uploadConsoleFile,
 } from '@proto-shared/qwenpaw-client';
+import { uuid } from '@proto-shared/uuid';
 import type {
   ChatTextContentBlock,
   ChatHistory,
@@ -442,7 +443,7 @@ export function useQwenPawChatSession() {
           const format = guessAudioFormat(audioBlob.type || recordingMimeType.value);
 
           state.value.pendingUploads.push({
-            id: crypto.randomUUID(),
+            id: uuid(),
             kind: 'audio',
             name: `voice-${new Date().toISOString().replace(/[:.]/g, '-')}.${format}`,
             size: audioBlob.size,
@@ -1134,7 +1135,7 @@ function applyContentEvent(
   const parentType = parentMessageId ? messageTypeMap.get(parentMessageId) : undefined;
   const payload = extractToolPayloadRecord(event);
   const descriptor = resolveSectionDescriptor(parentType, event.role, payload);
-  const sectionId = parentMessageId ?? `content:${event.id ?? crypto.randomUUID()}`;
+  const sectionId = parentMessageId ?? `content:${event.id ?? uuid()}`;
 
   if (!descriptor) {
     return;
@@ -1354,7 +1355,7 @@ function normalizeOutputMessages(output: QwenPawStreamEvent['output']): QwenPawH
     .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value)))
     .map((record) => ({
       ...(record as QwenPawHistoryMessage),
-      id: typeof record.id === 'string' && record.id ? record.id : crypto.randomUUID(),
+      id: typeof record.id === 'string' && record.id ? record.id : uuid(),
       role: normalizeHistoryRole(record.role),
       content: Array.isArray(record.content) ? (record.content as QwenPawMessageContentBlock[]) : null,
     }));
@@ -1412,7 +1413,7 @@ function applyHistoryAssistantMessage(
   const payload = extractToolPayloadRecord(message);
   const descriptor = resolveSectionDescriptor(normalizeMessageType(message.type), message.role ?? undefined, payload);
   if (descriptor) {
-    const section = ensureSection(assistantMessage, message.id || crypto.randomUUID(), descriptor);
+    const section = ensureSection(assistantMessage, message.id || uuid(), descriptor);
     if (payload) {
       applyToolPayload(section, payload, streamOutcome);
     }
@@ -1450,7 +1451,7 @@ function applyHistoryAssistantMessage(
 function createHistoryPrimaryMessage(message: QwenPawHistoryMessage, role: 'user' | 'system'): ChatMessage {
   const blocks = toUiContentBlocks(Array.isArray(message.content) ? message.content : [], role);
   return {
-    id: message.id || crypto.randomUUID(),
+    id: message.id || uuid(),
     role,
     content: extractPlainTextFromBlocks(blocks),
     contentBlocks: blocks,
@@ -1465,7 +1466,7 @@ function createMessageFromRequestMessage(
 ): ChatMessage {
   const blocks = requestBlocksToUiBlocks(message.content, message.role);
   return {
-    id: crypto.randomUUID(),
+    id: uuid(),
     role: message.role,
     content: extractPlainTextFromBlocks(blocks),
     contentBlocks: blocks,
@@ -1477,7 +1478,7 @@ function createMessageFromRequestMessage(
 
 function createAssistantMessage(status: ChatMessageStatus): ChatMessage {
   return {
-    id: crypto.randomUUID(),
+    id: uuid(),
     role: 'assistant',
     content: '',
     contentBlocks: [],
@@ -1696,7 +1697,7 @@ function resolveRecordingMimeType(): string {
 
 function createPendingFileUpload(file: File): PendingUpload {
   return {
-    id: crypto.randomUUID(),
+    id: uuid(),
     kind: file.type.startsWith('image/') ? 'image' : 'file',
     name: file.name,
     size: file.size,
@@ -1788,7 +1789,7 @@ function requestBlocksToUiBlocks(
   for (const contentBlock of contentBlocks) {
     if (contentBlock.type === 'text') {
       result.push({
-        id: crypto.randomUUID(),
+        id: uuid(),
         type: 'text',
         text: contentBlock.text,
         format: role === 'assistant' ? 'markdown' : 'plain',
@@ -1798,7 +1799,7 @@ function requestBlocksToUiBlocks(
 
     if (contentBlock.type === 'image') {
       result.push({
-        id: crypto.randomUUID(),
+        id: uuid(),
         type: 'image',
         imageUrl: contentBlock.image_url,
       });
@@ -1812,7 +1813,7 @@ function requestBlocksToUiBlocks(
       }
 
       result.push({
-        id: crypto.randomUUID(),
+        id: uuid(),
         type: 'file',
         fileUrl,
         filename: contentBlock.filename,
@@ -1823,7 +1824,7 @@ function requestBlocksToUiBlocks(
 
     if (contentBlock.type === 'audio') {
       result.push({
-        id: crypto.randomUUID(),
+        id: uuid(),
         type: 'audio',
         data: contentBlock.data,
         format: contentBlock.format,
@@ -1860,7 +1861,7 @@ function normalizeHistoryContentBlock(
     }
 
     return {
-      id: crypto.randomUUID(),
+      id: uuid(),
       type: 'text',
       text,
       format: role === 'assistant' ? 'markdown' : 'plain',
@@ -1874,7 +1875,7 @@ function normalizeHistoryContentBlock(
     }
 
     return {
-      id: crypto.randomUUID(),
+      id: uuid(),
       type: 'image',
       imageUrl: imageBlock.image_url,
     };
@@ -1888,7 +1889,7 @@ function normalizeHistoryContentBlock(
     }
 
     return {
-      id: crypto.randomUUID(),
+      id: uuid(),
       type: 'file',
       fileUrl,
       filename: fileBlock.filename ?? undefined,
@@ -1903,7 +1904,7 @@ function normalizeHistoryContentBlock(
     }
 
     return {
-      id: crypto.randomUUID(),
+      id: uuid(),
       type: 'audio',
       data: audioBlock.data,
       format: audioBlock.format,
@@ -1917,7 +1918,7 @@ function normalizeHistoryContentBlock(
 function normalizeEventContentBlock(event: QwenPawStreamEvent): ChatMessageContentBlock | null {
   if (event.type === 'image' && typeof event.image_url === 'string' && event.image_url.trim()) {
     return {
-      id: crypto.randomUUID(),
+      id: uuid(),
       type: 'image',
       imageUrl: event.image_url,
     };
@@ -1930,7 +1931,7 @@ function normalizeEventContentBlock(event: QwenPawStreamEvent): ChatMessageConte
     }
 
     return {
-      id: crypto.randomUUID(),
+      id: uuid(),
       type: 'file',
       fileUrl,
       filename: typeof event.filename === 'string' ? event.filename : undefined,
@@ -1940,7 +1941,7 @@ function normalizeEventContentBlock(event: QwenPawStreamEvent): ChatMessageConte
 
   if (event.type === 'audio' && typeof event.data === 'string' && typeof event.format === 'string') {
     return {
-      id: crypto.randomUUID(),
+      id: uuid(),
       type: 'audio',
       data: event.data,
       format: event.format,
