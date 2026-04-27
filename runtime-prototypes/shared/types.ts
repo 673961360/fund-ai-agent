@@ -136,6 +136,14 @@ export interface QwenPawClientConfig {
   model: string;
 }
 
+export type QwenPawConnectionMode = 'proxy' | 'direct';
+
+export interface QwenPawConnectionInfo {
+  requestEntry: string;
+  proxyTarget: string;
+  mode: QwenPawConnectionMode;
+}
+
 export interface QwenPawRuntimeConfigInput {
   apiBaseUrl?: string;
   userId?: string;
@@ -339,12 +347,14 @@ export interface QwenPawStreamEvent {
   error?: string | { message?: string; [key: string]: unknown };
   usage?: Record<string, unknown>;
   metadata?: { clear_history?: boolean; [key: string]: unknown };
+  output?: QwenPawHistoryMessage[] | Record<string, unknown>[];
   [key: string]: unknown;
 }
 
 export interface StreamEventHandlers {
   onEvent: (event: QwenPawStreamEvent) => void;
   signal?: AbortSignal;
+  earlyExitSignal?: AbortSignal;
 }
 
 export interface SendChatOptions extends StreamEventHandlers {

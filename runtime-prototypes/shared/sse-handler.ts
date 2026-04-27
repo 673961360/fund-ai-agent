@@ -28,51 +28,75 @@ export async function consumeResponseStream(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let earlyExitRequested = handlers.earlyExitSignal?.aborted ?? false;
+  const handleEarlyExit = () => {
+    earlyExitRequested = true;
+    void reader.cancel();
+  };
 
-  while (true) {
-    throwIfAborted(handlers.signal);
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+  handlers.earlyExitSignal?.addEventListener('abort', handleEarlyExit);
+
+  try {
+    while (true) {
+      throwIfAborted(handlers.signal);
+      if (earlyExitRequested) {
+        return;
+      }
+
+      let readResult: ReadableStreamReadResult<Uint8Array>;
+      try {
+        readResult = await reader.read();
+      } catch (error) {
+        if (earlyExitRequested) {
+          return;
+        }
+        throw error;
+      }
+      const { value, done } = readResult;
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+      if (looksLikeEventStream(contentType)) {
+        const result = flushEventStream(buffer, handlers.onEvent);
+        buffer = result.buffer;
+        if (result.isDone || earlyExitRequested) {
+          await reader.cancel();
+          return;
+        }
+      } else if (looksLikeStructuredText(contentType)) {
+        const result = flushStructuredLines(buffer, handlers.onEvent, false);
+        buffer = result.buffer;
+        if (result.isDone || earlyExitRequested) {
+          await reader.cancel();
+          return;
+        }
+      } else if (buffer) {
+        handlers.onEvent(createRawTextEvent(buffer));
+        buffer = '';
+      }
+
+      if (done) {
+        break;
+      }
+    }
+
+    if (!buffer) {
+      return;
+    }
 
     if (looksLikeEventStream(contentType)) {
-      const result = flushEventStream(buffer, handlers.onEvent);
-      buffer = result.buffer;
-      if (result.isDone) {
-        await reader.cancel();
-        return;
-      }
-    } else if (looksLikeStructuredText(contentType)) {
-      const result = flushStructuredLines(buffer, handlers.onEvent, false);
-      buffer = result.buffer;
-      if (result.isDone) {
-        await reader.cancel();
-        return;
-      }
-    } else if (buffer) {
-      handlers.onEvent(createRawTextEvent(buffer));
-      buffer = '';
+      flushEventStream(`${buffer}\n\n`, handlers.onEvent);
+      return;
     }
 
-    if (done) {
-      break;
+    if (looksLikeStructuredText(contentType)) {
+      flushStructuredLines(buffer, handlers.onEvent, true);
+      return;
     }
-  }
 
-  if (!buffer) {
-    return;
+    handlers.onEvent(createRawTextEvent(buffer));
+  } finally {
+    handlers.earlyExitSignal?.removeEventListener('abort', handleEarlyExit);
   }
-
-  if (looksLikeEventStream(contentType)) {
-    flushEventStream(`${buffer}\n\n`, handlers.onEvent);
-    return;
-  }
-
-  if (looksLikeStructuredText(contentType)) {
-    flushStructuredLines(buffer, handlers.onEvent, true);
-    return;
-  }
-
-  handlers.onEvent(createRawTextEvent(buffer));
 }
 
 async function safeReadPayload(response: Response): Promise<string> {

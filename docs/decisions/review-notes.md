@@ -549,3 +549,31 @@ M2 **全部满足**，可视为退出。
 
 - 本轮未做浏览器内人工点击验证，尤其未实测 `MediaRecorder`、Markdown 增量渲染体验、移动端布局与“发送即停止”的整套交互
 - 远端 stop 已切到 `chat_id` 契约，但尚未针对一个稳定的长耗时 running chat 做端到端停止烟测
+
+---
+
+## 2026-04-27 QwenPaw chat bugfix: skill completion and upload removal
+- executor: Codex
+- status: review_pending
+- scope:
+  - `runtime-prototypes/shared/types.ts`
+  - `runtime-prototypes/shared/qwenpaw-client.ts`
+  - `runtime-prototypes/shared/sse-handler.ts`
+  - `runtime-prototypes/qwenpaw-chat/src/composables/use-qwenpaw-chat-session.ts`
+  - `runtime-prototypes/qwenpaw-chat/src/components/ChatInputBar.vue`
+  - `docs/decisions/task-board.md`
+  - `docs/decisions/review-notes.md`
+- summary:
+  - Added `response.output` typing and stream backfill so skill/tool replies can populate the assistant bubble even when the final answer is only present on the response envelope.
+  - Added a local early-exit path for SSE consumption. The UI now keeps server terminal statuses as the primary completion signal, but if a renderable formal answer is already present and the stream stays silent for 1 second, the frontend closes the stream locally instead of staying in `streaming`.
+  - History normalization now merges tool-result messages by message type, even when QwenPaw persists them with `role=system`.
+  - Pending uploads can now be removed before send at any time. Each upload has its own `AbortController`, removal aborts the request immediately, and aborted uploads do not write an error state back into the composer.
+  - Follow-up fix: pending upload status updates are now applied through the reactive object stored in `state.pendingUploads`, which fixes the case where the UI showed an attachment as ready but `canSubmit` still stayed stuck in the old `uploading` state.
+  - Follow-up fix: file attachments in chat bubbles are now rendered as explicit attachment cards with filename fallback parsing, so uploaded files like `SKILL.md` remain readable inside the dark user bubble instead of blending into the old link color.
+  - Follow-up fix: user chat bubbles now use a light gray surface with dark text, and the runtime config panel now shows the currently effective request entry plus proxy target so proxy-vs-direct routing is visible in the UI.
+- validation:
+  - `npm.cmd run typecheck`
+  - `npm.cmd run build`
+- residual risks:
+  - No browser-side click-through verification was run in this turn, so `人员交接` still needs an end-to-end UI check against a live QwenPaw console session.
+  - Multi-file selection plus rapid conversation reset was not stress-tested; the current fix covers direct removal and in-flight cancelation, which was the reported bug.

@@ -11,6 +11,7 @@ import {
   sendQwenPawChat,
   setStoredActiveChatId,
   stopQwenPawChat,
+  updateChat,
   uploadConsoleFile,
 } from '@proto-shared/qwenpaw-client';
 import type {
@@ -74,6 +75,11 @@ interface DeleteChatOptions {
   token?: string | null;
 }
 
+interface RenameChatOptions {
+  agentId: string | null;
+  token?: string | null;
+}
+
 interface AddFilesOptions {
   agentId: string | null;
   token?: string | null;
@@ -105,6 +111,7 @@ export function useQwenPawChatSession() {
   const isLoadingChats = ref(false);
   const isLoadingHistory = ref(false);
   const deletingChatId = ref<string | null>(null);
+  const renamingChatId = ref<string | null>(null);
   const activeController = ref<AbortController | null>(null);
   const activeStreamChatId = ref<string | null>(null);
   const stopRequested = ref(false);
@@ -294,6 +301,45 @@ export function useQwenPawChatSession() {
       state.value.errorMessage = toErrorMessage(error);
     } finally {
       deletingChatId.value = null;
+    }
+  }
+
+  async function renameChatById(chatId: string, name: string, options: RenameChatOptions): Promise<void> {
+    if (!options.agentId) {
+      return;
+    }
+
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      state.value.errorMessage = '聊天名称不能为空。';
+      return;
+    }
+
+    const existingChat = state.value.chatList.find((chat) => chat.id === chatId);
+    if (existingChat && existingChat.name === trimmedName) {
+      return;
+    }
+
+    renamingChatId.value = chatId;
+    state.value.errorMessage = null;
+
+    try {
+      const updatedChat = await updateChat(
+        options.agentId,
+        chatId,
+        {
+          name: trimmedName,
+        },
+        options.token,
+      );
+
+      upsertChatSpec(updatedChat);
+    } catch (error) {
+      state.value.errorMessage = toErrorMessage(error);
+    } finally {
+      if (renamingChatId.value === chatId) {
+        renamingChatId.value = null;
+      }
     }
   }
 
@@ -625,6 +671,7 @@ export function useQwenPawChatSession() {
     isLoadingChats: computed(() => isLoadingChats.value),
     isLoadingHistory: computed(() => isLoadingHistory.value),
     deletingChatId: computed(() => deletingChatId.value),
+    renamingChatId: computed(() => renamingChatId.value),
     errorMessage: computed(() => state.value.errorMessage),
     hasMessages,
     hasPendingUploads,
@@ -636,6 +683,7 @@ export function useQwenPawChatSession() {
     removePendingUpload,
     createNewConversation,
     deleteChatById,
+    renameChatById,
     openChat,
     sendDraft,
     setActiveAgent,

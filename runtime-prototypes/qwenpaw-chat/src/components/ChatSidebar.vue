@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue';
 import type { RuntimeConfigFormState } from '@/types/chat-ui';
 import type { ChatSpec, QwenPawAgentSummary, QwenPawConnectionMode } from '@proto-shared/types';
 
@@ -26,6 +27,7 @@ interface Props {
   isLoadingChats: boolean;
   isLoadingHistory: boolean;
   deletingChatId: string | null;
+  renamingChatId: string | null;
 }
 
 const props = defineProps<Props>();
@@ -35,6 +37,7 @@ const emit = defineEmits<{
   'new-chat': [];
   'open-chat': [chatId: string];
   'delete-chat': [chatId: string];
+  'rename-chat': [chatId: string, name: string];
   login: [];
   'toggle-config': [];
   'update:username': [value: string];
@@ -46,6 +49,29 @@ const emit = defineEmits<{
   'save-config': [];
   'reset-config': [];
 }>();
+
+const editingChatId = ref<string | null>(null);
+const editingName = ref('');
+
+watch(
+  () => props.chatList,
+  (chatList) => {
+    if (!editingChatId.value) {
+      return;
+    }
+
+    const editingChat = chatList.find((chat) => chat.id === editingChatId.value);
+    if (!editingChat) {
+      cancelRename();
+      return;
+    }
+
+    if (!props.renamingChatId && normalizeChatName(editingChat.name) === editingName.value.trim()) {
+      cancelRename();
+    }
+  },
+  { deep: true },
+);
 
 function handleAgentChange(event: Event): void {
   const target = event.target as HTMLSelectElement;
@@ -80,6 +106,10 @@ function updateUserId(event: Event): void {
   emit('update:userId', (event.target as HTMLInputElement).value);
 }
 
+function updateEditingName(event: Event): void {
+  editingName.value = (event.target as HTMLInputElement).value;
+}
+
 function formatChatTime(value: string): string {
   const date = new Date(value);
   return date.toLocaleString([], {
@@ -88,6 +118,49 @@ function formatChatTime(value: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function normalizeChatName(value: string | null | undefined): string {
+  const normalizedValue = value?.trim();
+  return normalizedValue || 'New Chat';
+}
+
+function startRename(chat: ChatSpec): void {
+  if (isHistoryActionDisabled(chat.id)) {
+    return;
+  }
+
+  editingChatId.value = chat.id;
+  editingName.value = normalizeChatName(chat.name);
+}
+
+function cancelRename(): void {
+  editingChatId.value = null;
+  editingName.value = '';
+}
+
+function submitRename(chat: ChatSpec): void {
+  const nextName = editingName.value.trim();
+  if (!nextName) {
+    editingName.value = normalizeChatName(chat.name);
+    return;
+  }
+
+  if (nextName === normalizeChatName(chat.name)) {
+    cancelRename();
+    return;
+  }
+
+  emit('rename-chat', chat.id, nextName);
+}
+
+function isHistoryActionDisabled(chatId: string): boolean {
+  return Boolean(
+    props.isSending ||
+      props.isLoadingHistory ||
+      props.deletingChatId === chatId ||
+      props.renamingChatId === chatId,
+  );
 }
 </script>
 
@@ -123,7 +196,7 @@ function formatChatTime(value: string): string {
     <div class="chat-sidebar__history">
       <div class="chat-sidebar__history-header">
         <span class="chat-sidebar__label">历史聊天</span>
-        <span v-if="props.isLoadingChats" class="chat-sidebar__muted">加载中</span>
+        <span v-if="props.isLoadingChats" class="chat-sidebar__muted">加载中...</span>
       </div>
 
       <div v-if="props.chatList.length === 0" class="chat-sidebar__history-empty">
@@ -133,27 +206,81 @@ function formatChatTime(value: string): string {
 
       <ul v-else class="chat-sidebar__history-list">
         <li v-for="chat in props.chatList" :key="chat.id" class="chat-sidebar__history-item">
-          <button
-            class="chat-sidebar__history-card"
-            :class="{ 'chat-sidebar__history-card--active': chat.id === props.activeChatId }"
-            type="button"
-            :disabled="props.isLoadingHistory || props.deletingChatId === chat.id"
-            @click="emit('open-chat', chat.id)"
-          >
-            <span class="chat-sidebar__history-title">{{ chat.name || 'New Chat' }}</span>
-            <span class="chat-sidebar__history-meta">
-              <span>{{ formatChatTime(chat.updated_at) }}</span>
-              <span v-if="chat.status === 'running'" class="chat-sidebar__history-status">运行中</span>
-            </span>
-          </button>
-          <button
-            class="chat-sidebar__history-delete"
-            type="button"
-            :disabled="props.isSending || props.deletingChatId === chat.id"
-            @click="emit('delete-chat', chat.id)"
-          >
-            {{ props.deletingChatId === chat.id ? '删除中' : '删除' }}
-          </button>
+          <template v-if="editingChatId === chat.id">
+            <div
+              class="chat-sidebar__history-card chat-sidebar__history-card--editing"
+              :class="{ 'chat-sidebar__history-card--active': chat.id === props.activeChatId }"
+            >
+              <input
+                class="chat-sidebar__history-input"
+                type="text"
+                :value="editingName"
+                maxlength="80"
+                :disabled="props.renamingChatId === chat.id"
+                @input="updateEditingName"
+                @keydown.esc.prevent="cancelRename"
+                @keyup.enter.prevent="submitRename(chat)"
+              />
+              <span class="chat-sidebar__history-meta">
+                <span>{{ formatChatTime(chat.updated_at) }}</span>
+                <span v-if="chat.status === 'running'" class="chat-sidebar__history-status">运行中</span>
+              </span>
+            </div>
+
+            <div class="chat-sidebar__history-actions">
+              <button
+                class="chat-sidebar__history-action chat-sidebar__history-action--primary"
+                type="button"
+                :disabled="props.renamingChatId === chat.id"
+                @click="submitRename(chat)"
+              >
+                {{ props.renamingChatId === chat.id ? '保存中' : '保存' }}
+              </button>
+              <button
+                class="chat-sidebar__history-action"
+                type="button"
+                :disabled="props.renamingChatId === chat.id"
+                @click="cancelRename"
+              >
+                取消
+              </button>
+            </div>
+          </template>
+
+          <template v-else>
+            <button
+              class="chat-sidebar__history-card"
+              :class="{ 'chat-sidebar__history-card--active': chat.id === props.activeChatId }"
+              type="button"
+              :disabled="props.isLoadingHistory || props.deletingChatId === chat.id"
+              @click="emit('open-chat', chat.id)"
+            >
+              <span class="chat-sidebar__history-title">{{ normalizeChatName(chat.name) }}</span>
+              <span class="chat-sidebar__history-meta">
+                <span>{{ formatChatTime(chat.updated_at) }}</span>
+                <span v-if="chat.status === 'running'" class="chat-sidebar__history-status">运行中</span>
+              </span>
+            </button>
+
+            <div class="chat-sidebar__history-actions">
+              <button
+                class="chat-sidebar__history-action"
+                type="button"
+                :disabled="isHistoryActionDisabled(chat.id)"
+                @click="startRename(chat)"
+              >
+                改名
+              </button>
+              <button
+                class="chat-sidebar__history-action chat-sidebar__history-action--danger"
+                type="button"
+                :disabled="props.isSending || props.deletingChatId === chat.id"
+                @click="emit('delete-chat', chat.id)"
+              >
+                {{ props.deletingChatId === chat.id ? '删除中' : '删除' }}
+              </button>
+            </div>
+          </template>
         </li>
       </ul>
 

@@ -59,6 +59,8 @@ const {
   openChat,
   pendingUploads,
   recordingState,
+  renameChatById,
+  renamingChatId,
   removePendingUpload,
   retryPendingUpload,
   sendDraft,
@@ -352,6 +354,13 @@ function handleDeleteChat(chatId: string): void {
   });
 }
 
+function handleRenameChat(chatId: string, name: string): void {
+  void renameChatById(chatId, name, {
+    agentId: selectedAgentId.value,
+    token: token.value,
+  });
+}
+
 function handleAddFiles(files: File[]): void {
   void addPendingFiles({
     agentId: selectedAgentId.value,
@@ -483,10 +492,12 @@ watch(
         :is-loading-chats="isLoadingChats"
         :is-loading-history="isLoadingHistory"
         :deleting-chat-id="deletingChatId"
+        :renaming-chat-id="renamingChatId"
         @select-agent="handleAgentSelect"
         @new-chat="handleNewConversation"
         @open-chat="handleOpenChat"
         @delete-chat="handleDeleteChat"
+        @rename-chat="handleRenameChat"
         @login="handleLogin"
         @toggle-config="toggleRuntimeConfig"
         @update:username="updateLoginField('username', $event)"

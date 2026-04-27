@@ -2,11 +2,13 @@ import { consumeResponseStream } from './sse-handler';
 import type {
   ChatHistory,
   ChatSpec,
+  ChatUpdate,
   CreateChatInput,
   ListChatsOptions,
   QwenPawAgentSummary,
   QwenPawAuthStatusResponse,
   QwenPawClientConfig,
+  QwenPawConnectionInfo,
   QwenPawConsoleRequest,
   QwenPawHistoryMessage,
   QwenPawLoginRequest,
@@ -21,6 +23,7 @@ import type {
 const DEFAULT_PROXY_PREFIX = '/qwenpaw-api';
 const DEFAULT_USER_ID = 'default_user';
 const DEFAULT_CHANNEL = 'console';
+const PROXY_TARGET_ENV = import.meta.env.VITE_QWENPAW_TARGET;
 
 export const TOKEN_STORAGE_KEY = 'qwenpaw_auth_token';
 export const USER_STORAGE_KEY = 'qwenpaw_username';
@@ -87,6 +90,20 @@ export function validateQwenPawApiBaseUrl(value: string): string | null {
   }
 
   return 'API 地址必须以 http://、https:// 或 / 开头。';
+}
+
+export function getQwenPawConnectionInfo(
+  config: QwenPawClientConfig = getQwenPawClientConfig(),
+): QwenPawConnectionInfo {
+  const apiBaseUrl = normalizeApiBaseUrl(config.apiBaseUrl);
+  const mode = isAbsoluteUrl(apiBaseUrl) ? 'direct' : 'proxy';
+
+  return {
+    requestEntry: resolveRequestEntry(apiBaseUrl),
+    proxyTarget:
+      mode === 'direct' ? '未使用（当前为直连）' : normalizeText(PROXY_TARGET_ENV) || '未暴露',
+    mode,
+  };
 }
 
 export function getStoredToken(): string | null {
@@ -312,6 +329,32 @@ export async function createChat(
   return normalizeChatSpec(payload);
 }
 
+export async function updateChat(
+  agentId: string,
+  chatId: string,
+  data: ChatUpdate,
+  token?: string | null,
+  signal?: AbortSignal,
+): Promise<ChatSpec> {
+  const response = await fetch(
+    resolveApiUrl(`/api/agents/${encodeURIComponent(agentId)}/chats/${encodeURIComponent(chatId)}`),
+    {
+      method: 'PUT',
+      headers: buildHeaders({
+        accept: 'application/json',
+        contentType: 'application/json',
+        token,
+        agentId,
+      }),
+      body: JSON.stringify(data),
+      signal,
+    },
+  );
+
+  const payload = await readJsonResponse<unknown>(response, 'Unable to update the selected QwenPaw chat.');
+  return normalizeChatSpec(payload);
+}
+
 export async function deleteChat(
   agentId: string,
   chatId: string,
@@ -377,6 +420,7 @@ export async function sendQwenPawChat(options: SendChatOptions): Promise<void> {
   await consumeResponseStream(response, {
     onEvent: options.onEvent,
     signal: options.signal,
+    earlyExitSignal: options.earlyExitSignal,
   });
 }
 
@@ -581,6 +625,19 @@ function resolveApiUrl(path: string): string {
   }
 
   return `${normalizePath(apiBaseUrl)}${normalizePath(path)}`;
+}
+
+function resolveRequestEntry(apiBaseUrl: string): string {
+  if (isAbsoluteUrl(apiBaseUrl)) {
+    return removeTrailingSlash(apiBaseUrl);
+  }
+
+  const normalizedPath = normalizePath(apiBaseUrl);
+  if (typeof window === 'undefined' || !window.location?.origin) {
+    return normalizedPath;
+  }
+
+  return `${removeTrailingSlash(window.location.origin)}${normalizedPath}`;
 }
 
 function normalizePath(value: string): string {
