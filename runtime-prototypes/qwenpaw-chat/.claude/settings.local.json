@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xxd \"D:/个人本地知识库/yfbcode/fund-ai/fund_ai_agent/runtime-prototypes/qwenpaw-chat/README.md\")"
+    ]
+  }
+}

@@ -166,7 +166,7 @@ watch(
           <button
             class="chat-input-bar__chip"
             type="button"
-            :disabled="upload.status === 'uploading'"
+            :disabled="busy"
             @click="emit('remove-upload', upload.id)"
           >
             移除

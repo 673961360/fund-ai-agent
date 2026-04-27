@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { RuntimeConfigFormState } from '@/types/chat-ui';
-import type { ChatSpec, QwenPawAgentSummary } from '@proto-shared/types';
+import type { ChatSpec, QwenPawAgentSummary, QwenPawConnectionMode } from '@proto-shared/types';
 
 interface Props {
   agents: QwenPawAgentSummary[];
@@ -16,6 +16,9 @@ interface Props {
   configBusy: boolean;
   configDirty: boolean;
   runtimeConfig: RuntimeConfigFormState;
+  requestEntry: string;
+  proxyTarget: string;
+  connectionMode: QwenPawConnectionMode;
   apiBaseUrlErrorMessage: string;
   configFeedbackMessage: string;
   chatList: ChatSpec[];
@@ -199,6 +202,20 @@ function formatChatTime(value: string): string {
       </button>
 
       <div v-if="props.configExpanded" class="chat-sidebar__config-body">
+        <div class="chat-sidebar__connection">
+          <p class="chat-sidebar__note">以下为当前已生效连接信息</p>
+          <dl class="chat-sidebar__connection-list">
+            <div class="chat-sidebar__connection-row">
+              <dt>当前请求入口</dt>
+              <dd :title="props.requestEntry">{{ props.requestEntry }}</dd>
+            </div>
+            <div class="chat-sidebar__connection-row">
+              <dt>代理目标地址</dt>
+              <dd :title="props.proxyTarget">{{ props.proxyTarget }}</dd>
+            </div>
+          </dl>
+        </div>
+
         <input
           class="chat-sidebar__control"
           :class="{ 'chat-sidebar__control--invalid': Boolean(props.apiBaseUrlErrorMessage) }"

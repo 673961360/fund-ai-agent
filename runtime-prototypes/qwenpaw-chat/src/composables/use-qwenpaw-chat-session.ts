@@ -112,6 +112,11 @@ export function useQwenPawChatSession() {
   const recordingStream = ref<MediaStream | null>(null);
   const recordingChunks = ref<Blob[]>([]);
   const recordingMimeType = ref('');
+  const localCompletionController = ref<AbortController | null>(null);
+  const localCompletionTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+  const localCompletionRequested = ref(false);
+  const uploadControllers = new Map<string, AbortController>();
+  const cancelledUploadIds = new Set<string>();
 
   const hasMessages = computed(() => state.value.messages.length > 0);
   const hasPendingUploads = computed(() => state.value.pendingUploads.length > 0);
@@ -136,6 +141,82 @@ export function useQwenPawChatSession() {
       uploads: state.value.pendingUploads,
     });
   });
+
+  function clearLocalCompletionTimer(): void {
+    if (localCompletionTimer.value) {
+      clearTimeout(localCompletionTimer.value);
+      localCompletionTimer.value = null;
+    }
+  }
+
+  function resetLocalCompletionState(): void {
+    clearLocalCompletionTimer();
+    localCompletionRequested.value = false;
+    localCompletionController.value = null;
+  }
+
+  function requestLocalCompletion(): void {
+    if (localCompletionRequested.value) {
+      return;
+    }
+
+    localCompletionRequested.value = true;
+    clearLocalCompletionTimer();
+    localCompletionController.value?.abort();
+  }
+
+  function scheduleLocalCompletion(assistantMessage: ChatMessage, streamOutcome: StreamOutcome): void {
+    clearLocalCompletionTimer();
+
+    if (
+      streamOutcome.terminalStatus ||
+      assistantMessage.status === 'error' ||
+      !hasRenderableAnswerContent(assistantMessage)
+    ) {
+      return;
+    }
+
+    localCompletionTimer.value = setTimeout(() => {
+      if (
+        !state.value.isSending ||
+        streamOutcome.terminalStatus ||
+        assistantMessage.status === 'error' ||
+        !hasRenderableAnswerContent(assistantMessage)
+      ) {
+        return;
+      }
+
+      requestLocalCompletion();
+    }, 1000);
+  }
+
+  function cancelTrackedUpload(uploadId: string): void {
+    const controller = uploadControllers.get(uploadId);
+    if (!controller) {
+      cancelledUploadIds.delete(uploadId);
+      return;
+    }
+
+    cancelledUploadIds.add(uploadId);
+    controller.abort();
+    uploadControllers.delete(uploadId);
+  }
+
+  function hasPendingUpload(uploadId: string): boolean {
+    return state.value.pendingUploads.some((upload) => upload.id === uploadId);
+  }
+
+  function getTrackedPendingUpload(uploadId: string): PendingUpload | null {
+    return state.value.pendingUploads.find((upload) => upload.id === uploadId) ?? null;
+  }
+
+  function disposePendingUploads(uploads: PendingUpload[]): void {
+    for (const upload of uploads) {
+      cancelTrackedUpload(upload.id);
+    }
+
+    releaseComposerUploads(uploads);
+  }
 
   async function setActiveAgent(agentId: string | null, options: AgentWorkspaceOptions = {}): Promise<void> {
     if (!options.force && activeAgentId.value === agentId) {
@@ -229,14 +310,15 @@ export function useQwenPawChatSession() {
     for (const file of options.files) {
       const upload = createPendingFileUpload(file);
       state.value.pendingUploads.push(upload);
+      const trackedUpload = getTrackedPendingUpload(upload.id) ?? upload;
 
       if (file.size > MAX_UPLOAD_SIZE) {
-        upload.status = 'error';
-        upload.errorMessage = '文件大小超过 10MB 限制。';
+        trackedUpload.status = 'error';
+        trackedUpload.errorMessage = '文件大小超过 10MB 限制。';
         continue;
       }
 
-      await uploadPendingFile(options.agentId, upload, options.token ?? null);
+      await uploadPendingFile(options.agentId, trackedUpload, options.token ?? null);
     }
   }
 
@@ -251,10 +333,11 @@ export function useQwenPawChatSession() {
 
   function removePendingUpload(uploadId: string): void {
     const upload = state.value.pendingUploads.find((item) => item.id === uploadId);
-    if (!upload || upload.status === 'uploading') {
+    if (!upload) {
       return;
     }
 
+    cancelTrackedUpload(uploadId);
     revokePendingUpload(upload);
     state.value.pendingUploads = state.value.pendingUploads.filter((item) => item.id !== uploadId);
   }
@@ -404,8 +487,11 @@ export function useQwenPawChatSession() {
       updated_at: new Date().toISOString(),
     });
 
+    resetLocalCompletionState();
     const controller = new AbortController();
+    const completionController = new AbortController();
     activeController.value = controller;
+    localCompletionController.value = completionController;
 
     const streamOutcome: StreamOutcome = {
       hasRenderableContent: false,
@@ -425,8 +511,10 @@ export function useQwenPawChatSession() {
         channel: runtimeConfig.channel,
         model: runtimeConfig.model,
         signal: controller.signal,
+        earlyExitSignal: completionController.signal,
         onEvent: (event) => {
           applyStreamEvent(event, assistantMessage, streamOutcome, messageTypeMap, state.value);
+          scheduleLocalCompletion(assistantMessage, streamOutcome);
         },
       });
 
@@ -444,6 +532,22 @@ export function useQwenPawChatSession() {
       releaseComposerUploads(composerSnapshot.uploads);
     } catch (error) {
       if (isAbortError(error)) {
+        if (localCompletionRequested.value) {
+          finalizeCompletedStream(assistantMessage, streamOutcome, state.value);
+          state.value.activeChatStatus = 'idle';
+          patchChatSpec(chatSpec.id, {
+            status: 'idle',
+            updated_at: new Date().toISOString(),
+          });
+
+          if (streamOutcome.resetSessionAfterCompletion) {
+            prepareBlankConversation(true);
+          }
+
+          releaseComposerUploads(composerSnapshot.uploads);
+          return;
+        }
+
         finalizeAbortedAssistantMessage(assistantMessage, state.value);
         state.value.activeChatStatus = stopRequested.value ? 'idle' : 'interrupted';
         patchChatSpec(chatSpec.id, {
@@ -476,6 +580,7 @@ export function useQwenPawChatSession() {
       activeController.value = null;
       activeStreamChatId.value = null;
       stopRequested.value = false;
+      resetLocalCompletionState();
     }
   }
 
@@ -485,6 +590,7 @@ export function useQwenPawChatSession() {
     }
 
     stopRequested.value = true;
+    clearLocalCompletionTimer();
     activeController.value.abort();
 
     if (!options.agentId || !activeStreamChatId.value) {
@@ -500,8 +606,10 @@ export function useQwenPawChatSession() {
 
   onBeforeUnmount(() => {
     activeController.value?.abort();
+    localCompletionController.value?.abort();
+    clearLocalCompletionTimer();
     cleanupRecorder();
-    releaseComposerUploads(state.value.pendingUploads);
+    disposePendingUploads(state.value.pendingUploads);
   });
 
   return {
@@ -634,8 +742,11 @@ export function useQwenPawChatSession() {
     activeStreamChatId.value = chatSpec.id;
     stopRequested.value = false;
 
+    resetLocalCompletionState();
     const controller = new AbortController();
+    const completionController = new AbortController();
     activeController.value = controller;
+    localCompletionController.value = completionController;
 
     const streamOutcome: StreamOutcome = {
       hasRenderableContent: false,
@@ -654,8 +765,10 @@ export function useQwenPawChatSession() {
         channel: runtimeConfig.channel,
         model: runtimeConfig.model,
         signal: controller.signal,
+        earlyExitSignal: completionController.signal,
         onEvent: (event) => {
           applyStreamEvent(event, assistantMessage, streamOutcome, messageTypeMap, state.value);
+          scheduleLocalCompletion(assistantMessage, streamOutcome);
         },
       });
 
@@ -667,6 +780,16 @@ export function useQwenPawChatSession() {
       });
     } catch (error) {
       if (isAbortError(error)) {
+        if (localCompletionRequested.value) {
+          finalizeCompletedStream(assistantMessage, streamOutcome, state.value);
+          state.value.activeChatStatus = 'idle';
+          patchChatSpec(chatSpec.id, {
+            status: 'idle',
+            updated_at: new Date().toISOString(),
+          });
+          return;
+        }
+
         finalizeAbortedAssistantMessage(assistantMessage, state.value);
         state.value.activeChatStatus = stopRequested.value ? 'idle' : 'interrupted';
         patchChatSpec(chatSpec.id, {
@@ -683,6 +806,7 @@ export function useQwenPawChatSession() {
       activeController.value = null;
       activeStreamChatId.value = null;
       stopRequested.value = false;
+      resetLocalCompletionState();
     }
   }
 
@@ -724,30 +848,54 @@ export function useQwenPawChatSession() {
   }
 
   async function uploadPendingFile(agentId: string, upload: PendingUpload, token?: string | null): Promise<void> {
-    if (!upload.sourceFile) {
-      upload.status = 'error';
-      upload.errorMessage = '缺少原始文件，无法重试上传。';
+    const trackedUpload = getTrackedPendingUpload(upload.id) ?? upload;
+
+    if (!trackedUpload.sourceFile) {
+      trackedUpload.status = 'error';
+      trackedUpload.errorMessage = '缺少原始文件，无法重试上传。';
       return;
     }
 
-    upload.status = 'uploading';
-    upload.errorMessage = '';
+    cancelledUploadIds.delete(trackedUpload.id);
+    trackedUpload.status = 'uploading';
+    trackedUpload.errorMessage = '';
+    const controller = new AbortController();
+    uploadControllers.set(trackedUpload.id, controller);
 
     try {
-      const result = await uploadConsoleFile(agentId, upload.sourceFile, token);
-      upload.status = 'ready';
-      upload.remoteUrl = result.url;
-      upload.fileId = result.fileId;
-      upload.name = result.filename || upload.name;
+      const result = await uploadConsoleFile(agentId, trackedUpload.sourceFile, token, controller.signal);
+      if (!hasPendingUpload(trackedUpload.id) || cancelledUploadIds.has(trackedUpload.id)) {
+        return;
+      }
+      const nextUpload = getTrackedPendingUpload(trackedUpload.id);
+      if (!nextUpload) {
+        return;
+      }
+      nextUpload.status = 'ready';
+      nextUpload.remoteUrl = result.url;
+      nextUpload.fileId = result.fileId;
+      nextUpload.name = result.filename || nextUpload.name;
     } catch (error) {
-      upload.status = 'error';
-      upload.errorMessage = toErrorMessage(error);
+      if (isAbortError(error) || cancelledUploadIds.has(trackedUpload.id) || !hasPendingUpload(trackedUpload.id)) {
+        return;
+      }
+      const nextUpload = getTrackedPendingUpload(trackedUpload.id);
+      if (!nextUpload) {
+        return;
+      }
+      nextUpload.status = 'error';
+      nextUpload.errorMessage = toErrorMessage(error);
+    } finally {
+      if (uploadControllers.get(trackedUpload.id) === controller) {
+        uploadControllers.delete(trackedUpload.id);
+      }
+      cancelledUploadIds.delete(trackedUpload.id);
     }
   }
 
   function clearComposer(): void {
     draft.value = '';
-    releaseComposerUploads(state.value.pendingUploads);
+    disposePendingUploads(state.value.pendingUploads);
     state.value.pendingUploads = [];
     if (state.value.recordingState.status !== 'recording' && state.value.recordingState.status !== 'processing') {
       state.value.recordingState = canRecord.value ? createIdleRecordingState() : createUnsupportedRecordingState();
@@ -796,6 +944,7 @@ export function useQwenPawChatSession() {
 
   function resetWorkspace(): void {
     clearComposer();
+    clearLocalCompletionTimer();
     state.value.messages = [];
     state.value.chatList = [];
     state.value.errorMessage = null;
@@ -869,6 +1018,12 @@ function applyStreamEvent(
       assistantMessage.content = streamErrorMessage;
     }
     state.errorMessage = streamErrorMessage;
+    return;
+  }
+
+  if (event.object === 'response') {
+    applyResponseOutputMessages(event.output, assistantMessage, streamOutcome);
+    syncAssistantMirrorContent(assistantMessage);
     return;
   }
 
@@ -973,6 +1128,24 @@ function applyContentEvent(
   }
 
   syncAssistantMirrorContent(assistantMessage);
+}
+
+function applyResponseOutputMessages(
+  output: QwenPawStreamEvent['output'],
+  assistantMessage: ChatMessage,
+  streamOutcome: StreamOutcome,
+): void {
+  if (!Array.isArray(output)) {
+    return;
+  }
+
+  for (const message of normalizeOutputMessages(output)) {
+    if (!isAssistantTurnHistoryMessage(message)) {
+      continue;
+    }
+
+    applyHistoryAssistantMessage(assistantMessage, message, streamOutcome);
+  }
 }
 
 function applyContentBlocks(
@@ -1112,19 +1285,61 @@ function finalizeAbortedAssistantMessage(assistantMessage: ChatMessage, state: C
   state.messages = state.messages.filter((message) => message.id !== assistantMessage.id);
 }
 
+function createStreamOutcome(): StreamOutcome {
+  return {
+    hasRenderableContent: false,
+    terminalStatus: null,
+    errorMessage: null,
+    resetSessionAfterCompletion: false,
+  };
+}
+
+function normalizeOutputMessages(output: QwenPawStreamEvent['output']): QwenPawHistoryMessage[] {
+  if (!Array.isArray(output)) {
+    return [];
+  }
+
+  return output
+    .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value)))
+    .map((record) => ({
+      ...(record as QwenPawHistoryMessage),
+      id: typeof record.id === 'string' && record.id ? record.id : crypto.randomUUID(),
+      role: normalizeHistoryRole(record.role),
+      content: Array.isArray(record.content) ? (record.content as QwenPawMessageContentBlock[]) : null,
+    }));
+}
+
+function normalizeHistoryRole(value: unknown): 'assistant' | 'system' | 'tool' | 'user' | null {
+  if (value !== 'assistant' && value !== 'system' && value !== 'tool' && value !== 'user') {
+    return null;
+  }
+
+  return value;
+}
+
+function isAssistantTurnHistoryMessage(message: QwenPawHistoryMessage): boolean {
+  const role = message.role ?? null;
+  if (role === 'assistant' || role === 'tool') {
+    return true;
+  }
+
+  const messageType = normalizeMessageType(message.type);
+  return role === 'system' && Boolean(messageType && TOOL_RESULT_MESSAGE_TYPES.has(messageType));
+}
+
 function normalizeHistoryMessages(history: ChatHistory): ChatMessage[] {
   const result: ChatMessage[] = [];
   let activeAssistantTurn: ChatMessage | null = null;
 
   for (const message of history.messages) {
     const role = message.role ?? null;
-    if (role === 'user' || role === 'system') {
+    if (role === 'user' || (role === 'system' && !isAssistantTurnHistoryMessage(message))) {
       activeAssistantTurn = null;
       result.push(createHistoryPrimaryMessage(message, role));
       continue;
     }
 
-    if (role === 'assistant' || role === 'tool') {
+    if (isAssistantTurnHistoryMessage(message)) {
       if (!activeAssistantTurn) {
         activeAssistantTurn = createAssistantMessage(normalizeMessageStatus(message.status));
         result.push(activeAssistantTurn);
@@ -1137,19 +1352,22 @@ function normalizeHistoryMessages(history: ChatHistory): ChatMessage[] {
   return result.filter((message) => message.role !== 'assistant' || hasVisibleAssistantContent(message));
 }
 
-function applyHistoryAssistantMessage(assistantMessage: ChatMessage, message: QwenPawHistoryMessage): void {
+function applyHistoryAssistantMessage(
+  assistantMessage: ChatMessage,
+  message: QwenPawHistoryMessage,
+  streamOutcome: StreamOutcome = createStreamOutcome(),
+): void {
   const descriptor = resolveSectionDescriptor(normalizeMessageType(message.type), message.role ?? undefined, null);
   if (descriptor) {
     const section = ensureSection(assistantMessage, message.id || crypto.randomUUID(), descriptor);
-    applyContentBlocks(section, assistantMessage, Array.isArray(message.content) ? message.content : [], 'backfill', {
-      hasRenderableContent: false,
-      terminalStatus: null,
-      errorMessage: null,
-      resetSessionAfterCompletion: false,
-    });
+    applyContentBlocks(section, assistantMessage, Array.isArray(message.content) ? message.content : [], 'backfill', streamOutcome);
     section.status = normalizeMessageStatus(message.status) === 'streaming' ? 'streaming' : 'ready';
   } else {
-    appendUniqueContentBlocks(assistantMessage, toUiContentBlocks(Array.isArray(message.content) ? message.content : [], 'assistant'));
+    const normalizedBlocks = toUiContentBlocks(Array.isArray(message.content) ? message.content : [], 'assistant');
+    appendUniqueContentBlocks(assistantMessage, normalizedBlocks);
+    if (normalizedBlocks.length > 0) {
+      streamOutcome.hasRenderableContent = true;
+    }
   }
 
   if (normalizeMessageStatus(message.status) === 'error') {
@@ -1341,6 +1559,20 @@ function hasVisibleAssistantContent(message: ChatMessage): boolean {
   }
 
   return (message.sections ?? []).some((section) => section.content.trim().length > 0);
+}
+
+function hasRenderableAnswerContent(message: ChatMessage): boolean {
+  if (message.content.trim()) {
+    return true;
+  }
+
+  if (message.contentBlocks.length > 0) {
+    return true;
+  }
+
+  return (message.sections ?? []).some(
+    (section) => section.kind === 'answer' && section.content.trim().length > 0,
+  );
 }
 
 function createInitialState(): ChatState {

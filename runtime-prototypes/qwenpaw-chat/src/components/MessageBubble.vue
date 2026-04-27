@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { renderMarkdown } from '@/utils/render-markdown';
-import type { ChatMessage, ChatMessageContentBlock, ChatMessageSection } from '@proto-shared/types';
+import type { ChatFileContentBlock, ChatMessage, ChatMessageContentBlock, ChatMessageSection } from '@proto-shared/types';
 
 interface Props {
   message: ChatMessage;
@@ -47,10 +47,15 @@ const detailSections = computed(() =>
 );
 const assistantMediaBlocks = computed(() => props.message.contentBlocks.filter((block) => block.type !== 'text'));
 const primaryContentBlocks = computed(() =>
-  props.message.role === 'assistant' ? props.message.contentBlocks.filter((block) => block.type !== 'text') : props.message.contentBlocks,
+  props.message.role === 'assistant'
+    ? props.message.contentBlocks.filter((block) => block.type !== 'text')
+    : props.message.contentBlocks,
 );
 const showAssistantFallback = computed(
-  () => props.message.role === 'assistant' && props.message.content.trim().length > 0 && answerSections.value.length === 0,
+  () =>
+    props.message.role === 'assistant' &&
+    props.message.content.trim().length > 0 &&
+    answerSections.value.length === 0,
 );
 const hasStructuredAssistantContent = computed(
   () =>
@@ -78,6 +83,37 @@ function renderFallbackMarkdown(): string {
   return renderMarkdown(props.message.content);
 }
 
+function resolveFileLabel(contentBlock: ChatFileContentBlock): string {
+  const directFilename = normalizeUploadedFilename(contentBlock.filename);
+  if (directFilename) {
+    return directFilename;
+  }
+
+  try {
+    const pathname = new URL(contentBlock.fileUrl, 'http://localhost').pathname;
+    const basename = decodeURIComponent(pathname.split('/').filter(Boolean).pop() ?? '');
+    return normalizeUploadedFilename(basename) || '下载文件';
+  } catch {
+    return '下载文件';
+  }
+}
+
+function normalizeUploadedFilename(value: string | undefined): string {
+  if (!value) {
+    return '';
+  }
+
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return '';
+  }
+
+  return trimmedValue.replace(/^[0-9a-f]{32}[_-]/i, '');
+}
+
+function asFileBlock(contentBlock: ChatMessageContentBlock): ChatFileContentBlock {
+  return contentBlock as ChatFileContentBlock;
+}
 </script>
 
 <template>
@@ -119,10 +155,20 @@ function renderFallbackMarkdown(): string {
             :href="contentBlock.fileUrl"
             target="_blank"
             rel="noopener noreferrer"
+            :title="resolveFileLabel(asFileBlock(contentBlock))"
           >
-            {{ contentBlock.filename || '下载文件' }}
+            <span class="message-bubble__file-icon">文件</span>
+            <span class="message-bubble__file-body">
+              <strong class="message-bubble__file-name">{{ resolveFileLabel(asFileBlock(contentBlock)) }}</strong>
+              <span class="message-bubble__file-meta">打开附件</span>
+            </span>
           </a>
-          <audio v-else-if="contentBlock.type === 'audio'" class="message-bubble__audio" controls :src="contentBlock.dataUrl" />
+          <audio
+            v-else-if="contentBlock.type === 'audio'"
+            class="message-bubble__audio"
+            controls
+            :src="contentBlock.dataUrl"
+          />
         </template>
       </div>
 
@@ -156,10 +202,20 @@ function renderFallbackMarkdown(): string {
           :href="contentBlock.fileUrl"
           target="_blank"
           rel="noopener noreferrer"
+          :title="resolveFileLabel(asFileBlock(contentBlock))"
         >
-          {{ contentBlock.filename || '下载文件' }}
+          <span class="message-bubble__file-icon">文件</span>
+          <span class="message-bubble__file-body">
+            <strong class="message-bubble__file-name">{{ resolveFileLabel(asFileBlock(contentBlock)) }}</strong>
+            <span class="message-bubble__file-meta">打开附件</span>
+          </span>
         </a>
-        <audio v-else-if="contentBlock.type === 'audio'" class="message-bubble__audio" controls :src="contentBlock.dataUrl" />
+        <audio
+          v-else-if="contentBlock.type === 'audio'"
+          class="message-bubble__audio"
+          controls
+          :src="contentBlock.dataUrl"
+        />
       </template>
       <p v-if="primaryContentBlocks.length === 0" class="message-bubble__content">{{ message.content || ' ' }}</p>
     </div>

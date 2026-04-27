@@ -11,6 +11,7 @@ import type { RuntimeConfigFormState } from '@/types/chat-ui';
 import {
   getDefaultQwenPawClientConfig,
   getQwenPawClientConfig,
+  getQwenPawConnectionInfo,
   resetStoredQwenPawClientConfig,
   setStoredQwenPawClientConfig,
   validateQwenPawApiBaseUrl,
@@ -104,6 +105,7 @@ const isConfigDirty = computed(() => {
     normalizeText(runtimeConfigForm.userId) !== currentConfig.userId
   );
 });
+const connectionInfo = computed(() => getQwenPawConnectionInfo(runtimeConfig.value));
 const combinedErrorMessage = computed(
   () => chatErrorMessage.value ?? agentsErrorMessage.value ?? authErrorMessage.value,
 );
@@ -471,6 +473,9 @@ watch(
         :config-busy="isConfigBusy"
         :config-dirty="isConfigDirty"
         :runtime-config="runtimeConfigForm"
+        :request-entry="connectionInfo.requestEntry"
+        :proxy-target="connectionInfo.proxyTarget"
+        :connection-mode="connectionInfo.mode"
         :api-base-url-error-message="apiBaseUrlErrorMessage"
         :config-feedback-message="configFeedbackMessage"
         :chat-list="chatList"
