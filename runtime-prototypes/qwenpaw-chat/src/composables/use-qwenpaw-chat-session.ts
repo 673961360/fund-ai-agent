@@ -178,7 +178,7 @@ export function useQwenPawChatSession() {
     if (
       streamOutcome.terminalStatus ||
       assistantMessage.status === 'error' ||
-      !hasRenderableAnswerContent(assistantMessage)
+      !streamOutcome.hasRenderableContent
     ) {
       return;
     }
@@ -188,7 +188,7 @@ export function useQwenPawChatSession() {
         !state.value.isSending ||
         streamOutcome.terminalStatus ||
         assistantMessage.status === 'error' ||
-        !hasRenderableAnswerContent(assistantMessage)
+        !streamOutcome.hasRenderableContent
       ) {
         return;
       }
@@ -577,23 +577,10 @@ export function useQwenPawChatSession() {
 
       releaseComposerUploads(composerSnapshot.uploads);
     } catch (error) {
+      // earlyExitSignal abort 不会抛异常（reader.cancel 是正常返回），
+      // 所以 localCompletion 路径走的是 try 块 line 567 的 finalizeCompletedStream。
+      // 此处只处理真正的 abort（用户点击停止）和其他异常。
       if (isAbortError(error)) {
-        if (localCompletionRequested.value) {
-          finalizeCompletedStream(assistantMessage, streamOutcome, state.value);
-          state.value.activeChatStatus = 'idle';
-          patchChatSpec(chatSpec.id, {
-            status: 'idle',
-            updated_at: new Date().toISOString(),
-          });
-
-          if (streamOutcome.resetSessionAfterCompletion) {
-            prepareBlankConversation(true);
-          }
-
-          releaseComposerUploads(composerSnapshot.uploads);
-          return;
-        }
-
         finalizeAbortedAssistantMessage(assistantMessage, state.value);
         state.value.activeChatStatus = stopRequested.value ? 'idle' : 'interrupted';
         patchChatSpec(chatSpec.id, {
@@ -827,17 +814,8 @@ export function useQwenPawChatSession() {
         updated_at: new Date().toISOString(),
       });
     } catch (error) {
+      // earlyExitSignal abort 不会抛异常，localCompletion 路径走 try 块 line 810。
       if (isAbortError(error)) {
-        if (localCompletionRequested.value) {
-          finalizeCompletedStream(assistantMessage, streamOutcome, state.value);
-          state.value.activeChatStatus = 'idle';
-          patchChatSpec(chatSpec.id, {
-            status: 'idle',
-            updated_at: new Date().toISOString(),
-          });
-          return;
-        }
-
         finalizeAbortedAssistantMessage(assistantMessage, state.value);
         state.value.activeChatStatus = stopRequested.value ? 'idle' : 'interrupted';
         patchChatSpec(chatSpec.id, {
@@ -1418,10 +1396,13 @@ function applyHistoryAssistantMessage(
     }
   }
 
-  if (normalizeMessageStatus(message.status) === 'error') {
+  // 回补消息的状态不应覆盖已有的流式状态，只在需要升级时才更新
+  const msgStatus = normalizeMessageStatus(message.status);
+  if (msgStatus === 'error') {
     assistantMessage.status = 'error';
-  } else if (normalizeMessageStatus(message.status) === 'streaming') {
-    assistantMessage.status = 'streaming';
+  } else if (msgStatus === 'ready' && assistantMessage.status === 'streaming') {
+    // 回补消息已就绪且当前正在流式传输时，升级为 ready
+    assistantMessage.status = 'ready';
   }
 
   syncAssistantMirrorContent(assistantMessage);
