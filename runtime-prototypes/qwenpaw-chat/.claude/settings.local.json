@@ -1,7 +1,20 @@
 {
   "permissions": {
     "allow": [
-      "Bash(xxd \"D:/个人本地知识库/yfbcode/fund-ai/fund_ai_agent/runtime-prototypes/qwenpaw-chat/README.md\")"
+      "Bash(xxd \"D:/个人本地知识库/yfbcode/fund-ai/fund_ai_agent/runtime-prototypes/qwenpaw-chat/README.md\")",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(grep -E \"index.*\\\\.js$\")",
+      "PowerShell(Get-Process | Where-Object { $_.ProcessName -match \"node\" -or $_.ProcessName -match \"vite\" } | Select-Object Id, ProcessName, Path)",
+      "Bash(python *)",
+      "PowerShell(cd \"D:\\\\个人本地知识库\\\\yfbcode\\\\fund-ai\\\\fund_ai_agent\\\\runtime-prototypes\\\\qwenpaw-chat\"; git diff HEAD -- src/composables/use-qwenpaw-chat-session.ts)",
+      "PowerShell(netstat *)",
+      "PowerShell(cd \"D:\\\\个人本地知识库\\\\yfbcode\\\\fund-ai\\\\fund_ai_agent\\\\runtime-prototypes\\\\qwenpaw-chat\"; git show c694d91 -- src/composables/use-qwenpaw-chat-session.ts | Select-Object -First 200)",
+      "Bash(netstat -ano)",
+      "PowerShell(Stop-Process *)",
+      "Bash(start *)",
+      "Bash(pip show *)",
+      "Bash(xargs grep *)"
     ]
   }
 }

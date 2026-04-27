@@ -577,3 +577,43 @@ M2 **全部满足**，可视为退出。
 - residual risks:
   - No browser-side click-through verification was run in this turn, so `人员交接` still needs an end-to-end UI check against a live QwenPaw console session.
   - Multi-file selection plus rapid conversation reset was not stress-tested; the current fix covers direct removal and in-flight cancelation, which was the reported bug.
+
+---
+
+## 2026-04-27 QwenPaw chat bugfix: tool reply visibility
+- executor: Codex
+- status: review_pending
+- scope:
+  - `runtime-prototypes/shared/types.ts`
+  - `runtime-prototypes/qwenpaw-chat/src/composables/use-qwenpaw-chat-session.ts`
+  - `docs/decisions/task-board.md`
+  - `docs/decisions/review-notes.md`
+- summary:
+  - Confirmed the live `127.0.0.1:8088` tool stream shape is `reasoning -> plugin_call -> plugin_call_output -> reasoning -> answer -> response.completed`, so the regression is on the frontend side rather than a protocol mismatch.
+  - Narrowed the 1-second local completion fallback to cases where a formal answer is already renderable, preventing skill/tool turns from being closed early during the silence between tool output and final answer.
+  - Stream callbacks now resolve and mutate the tracked reactive assistant message instance after `messages.push(...)` / reconnect recovery, so `thinking / tool / answer` sections reliably trigger Vue updates instead of only mutating the raw object reference.
+  - Added compatibility for QwenPaw’s documented nested tool payload fields (`function_call`, `function_call_output`, `plugin_call`, `plugin_call_output`, `mcp_tool_call`, `mcp_tool_call_output`) and treat `message.type=assistant` as an answer section fallback.
+- validation:
+  - `Invoke-WebRequest` smoke against `http://127.0.0.1:8088/api/agents/default/console/chat` with `What time is it now in Shanghai?`; observed `plugin_call` / `plugin_call_output` plus final answer and `response.completed`
+  - `node --max-old-space-size=4096 .\\node_modules\\vue-tsc\\bin\\vue-tsc.js --noEmit`
+  - `node --max-old-space-size=4096 .\\node_modules\\vite\\bin\\vite.js build`
+- residual risks:
+  - No browser-side click-through verification was run in this turn, so the reported “tool call UI 不展示” case still needs a manual in-browser retest.
+  - On this machine, `npm.cmd run typecheck` / `npm.cmd run build` still hit a Node wrapper OOM; direct `node --max-old-space-size=4096` invocations are currently the reliable verification path.
+
+---
+
+## 2026-04-27 QwenPaw integration guide sync
+- executor: Codex
+- status: review_pending
+- scope:
+  - `runtime-prototypes/Python接入QwenPaw聊天接口指南.md`
+  - `docs/decisions/review-notes.md`
+- summary:
+  - Updated the integration guide’s SSE section to distinguish the official `function_call` example from the live local-console `plugin_call -> content.data -> plugin_call_output` stream shape observed on `127.0.0.1:8088`.
+  - Expanded the event-handling example so future clients treat tool payload extraction and `response.output` backfill as first-class logic rather than incidental fallbacks.
+  - Added explicit frontend/client constraints documenting the two regression-prone rules from this fix: do not locally complete on tool-only silence, and always mutate the tracked reactive assistant message instance instead of a detached object.
+- validation:
+  - Manual source inspection of `runtime-prototypes/Python接入QwenPaw聊天接口指南.md`
+- residual risks:
+  - The guide now reflects the currently observed local QwenPaw behavior, but other deployments may still emit `function_call`-style top-level payloads first; clients should keep both variants enabled.

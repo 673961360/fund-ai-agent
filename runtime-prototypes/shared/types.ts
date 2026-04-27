@@ -294,6 +294,12 @@ export interface QwenPawHistoryMessage {
   type?: string;
   role?: ChatRole | null;
   content?: QwenPawMessageContentBlock[] | null;
+  function_call?: QwenPawToolPayload | Record<string, unknown> | null;
+  function_call_output?: QwenPawToolPayload | Record<string, unknown> | null;
+  plugin_call?: QwenPawToolPayload | Record<string, unknown> | null;
+  plugin_call_output?: QwenPawToolPayload | Record<string, unknown> | null;
+  mcp_tool_call?: QwenPawToolPayload | Record<string, unknown> | null;
+  mcp_tool_call_output?: QwenPawToolPayload | Record<string, unknown> | null;
   error?: unknown;
   message?: string | null;
   code?: string | null;
@@ -339,6 +345,12 @@ export interface QwenPawStreamEvent {
   msg_id?: string;
   content?: QwenPawMessageContentBlock[];
   data?: QwenPawToolPayload | Record<string, unknown>;
+  function_call?: QwenPawToolPayload | Record<string, unknown> | null;
+  function_call_output?: QwenPawToolPayload | Record<string, unknown> | null;
+  plugin_call?: QwenPawToolPayload | Record<string, unknown> | null;
+  plugin_call_output?: QwenPawToolPayload | Record<string, unknown> | null;
+  mcp_tool_call?: QwenPawToolPayload | Record<string, unknown> | null;
+  mcp_tool_call_output?: QwenPawToolPayload | Record<string, unknown> | null;
   image_url?: string;
   file_url?: string;
   file_id?: string;

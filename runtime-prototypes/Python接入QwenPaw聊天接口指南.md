@@ -1136,10 +1136,30 @@ data: {"id": "response_123", "status": "completed", "object": "response", "usage
 
 ### 10.2 工具调用
 
+官方协议/文档中常见的工具调用事件形态如下：
+
 ```
 data: {"status": "in_progress", "type": "function_call", "function_call": {"name": "search", "arguments": "{\"query\": \"...\"}"}, "object": "message", "role": "assistant"}
 data: {"status": "completed", "type": "function_call_output", "function_call_output": {"call_id": "...", "output": "..."}, "object": "message", "role": "tool"}
 ```
+
+QwenPaw 本地控制台链路（2026-04-27，`127.0.0.1:8088`，`default` agent）实际观测到的常见形态如下：
+
+```
+data: {"object":"message","status":"in_progress","id":"msg_tool_call","type":"plugin_call","role":"assistant","content":null}
+data: {"object":"content","status":"in_progress","type":"data","msg_id":"msg_tool_call","data":{"call_id":"call_xxx","name":"get_current_time","arguments":"{}"}}
+data: {"object":"message","status":"completed","id":"msg_tool_call","type":"plugin_call","role":"assistant","content":[{"type":"data","data":{"call_id":"call_xxx","name":"get_current_time","arguments":"{}"}}]}
+
+data: {"object":"message","status":"in_progress","id":"msg_tool_result","type":"plugin_call_output","role":"tool","content":null}
+data: {"object":"content","status":"completed","type":"data","msg_id":"msg_tool_result","data":{"call_id":"call_xxx","name":"get_current_time","output":"[{\"type\": \"text\", \"text\": \"2026-04-27 20:02:10 Asia/Shanghai (Monday)\"}]"}}
+data: {"object":"message","status":"completed","id":"msg_tool_result","type":"plugin_call_output","role":"tool","content":[{"type":"data","data":{"call_id":"call_xxx","name":"get_current_time","output":"..."}}]}
+```
+
+结论：
+
+- 客户端不能只兼容 `function_call / function_call_output`
+- 还应兼容 `plugin_call / plugin_call_output / mcp_tool_call / mcp_tool_call_output`
+- tool payload 既可能放在顶层字段（如 `function_call`），也可能放在 `content.data` / `event.data`
 
 ### 10.3 事件判断逻辑
 
@@ -1149,10 +1169,23 @@ def handle_event(event: dict) -> str:
     obj = event.get("object")
     status = event.get("status")
     delta = event.get("delta", False)
+    msg_type = event.get("type")
 
-    if obj == "content" and delta:
+    if obj == "content" and msg_type == "data":
+        payload = event.get("data") or {}
+        return f"TOOL_PAYLOAD: {payload}"
+    elif obj == "content" and delta:
         return f"APPEND_TEXT: {event.get('text', '')}"
+    elif obj == "message" and msg_type in {
+        "function_call", "function_call_output",
+        "plugin_call", "plugin_call_output",
+        "mcp_tool_call", "mcp_tool_call_output",
+    }:
+        # 某些实现会把 tool payload 放在 message.function_call /
+        # message.plugin_call / message.content[0].data 中
+        return f"TOOL_MESSAGE: {msg_type}"
     elif obj == "response" and status == "completed":
+        # response.output 可能包含完整回放，可用于最终 backfill / 补偿
         return f"DONE: usage={event.get('usage')}"
     elif obj == "message" and status == "completed":
         return "MESSAGE_DONE"
@@ -1164,7 +1197,33 @@ def handle_event(event: dict) -> str:
         return f"IGNORE: {obj}/{status}"
 ```
 
----
+### 10.4 前端/客户端实现约束
+
+为避免“普通问答正常，但一旦涉及 tools 就看不到过程或正式应答”的回归，建议把下面几条作为强约束：
+
+1. **工具事件兼容要按“类型集合 + payload 位置”双维度处理**
+   - 类型集合：`function_call / function_call_output / plugin_call / plugin_call_output / mcp_tool_call / mcp_tool_call_output`
+   - payload 位置：顶层字段、`event.data`、`event.content[*].data`
+
+2. **`response.completed` 不能只当结束信号，也要当补偿信号**
+   - `response.output` 中可能带完整的 `reasoning / tool_call / tool_result / answer` 回放
+   - 如果前面的增量事件丢失、顺序异常，或 UI 中途断连，应该用 `response.output` 做最终 backfill
+
+3. **不要在“只有 thinking/tool 输出”时就本地收口**
+   - 工具调用后到正式应答前，服务端可能有短暂静默
+   - 如果客户端做“静默 N 秒自动完成”，必须以“正式应答已经可渲染”为前提
+   - 不能因为已经出现 `thinking` 或 `tool_result` 就提前结束流
+
+4. **响应式 UI 必须更新状态树中的真实 message 实例**
+   - Vue / React / MobX 等场景下，不要只修改一个脱离状态树的局部对象引用
+   - 应始终通过 `messages` 列表中当前跟踪的 assistant message 实例更新 `sections / content / status`
+   - 否则最容易出现：后台已有 tool 事件，但前端折叠块和正式应答不刷新
+
+5. **普通应答的 fallback 不要只认 `type == "message"`**
+   - 某些链路或文档示例里，assistant 父消息可能写成 `type == "assistant"`
+   - 这类事件在没有更精细分类时，应回退视为正式应答
+
+ ---
 
 ## 11. 注意事项
 
@@ -1175,6 +1234,9 @@ def handle_event(event: dict) -> str:
 5. **错误重试**：SSE 连接可能中断，建议在外层添加重试逻辑。或使用 `reconnect: true` 参数恢复流。
 6. **纯文本快捷**：`QwenPawClient` 的 `_build_request` 自动将 `content: "纯文本"` 包装为 `[{"type": "text", "text": "纯文本"}]`。
 7. **服务绑定**：QwenPaw 默认仅绑定 `127.0.0.1`，Python 脚本必须与 QwenPaw 服务运行在同一台机器上。如需远程访问，需修改启动参数 `--host 0.0.0.0`。
+8. **SSE 真实形态优先**：官方协议示例可作为起点，但控制台真实链路可能优先发 `plugin_call` 而不是 `function_call`。联调时应先抓一次原始 SSE，再确定客户端归并逻辑。
+9. **tool 后静默不等于完成**：如果客户端自己实现“本地超时收口”，必须确认正式应答已经出现；仅有 `thinking` / `tool_result` 时禁止收口。
+10. **终态兜底依赖 `response.output`**：为避免前端漏渲染或流中断后历史不完整，建议在 `response.completed` 时把 `output` 全量再归并一遍。
 
 ---
 

@@ -178,17 +178,18 @@ export function useQwenPawChatSession() {
     if (
       streamOutcome.terminalStatus ||
       assistantMessage.status === 'error' ||
-      !streamOutcome.hasRenderableContent
+      !hasRenderableAnswerContent(assistantMessage)
     ) {
       return;
     }
 
     localCompletionTimer.value = setTimeout(() => {
+      const trackedAssistantMessage = getTrackedAssistantMessage(state.value.messages, assistantMessage.id) ?? assistantMessage;
       if (
         !state.value.isSending ||
         streamOutcome.terminalStatus ||
-        assistantMessage.status === 'error' ||
-        !streamOutcome.hasRenderableContent
+        trackedAssistantMessage.status === 'error' ||
+        !hasRenderableAnswerContent(trackedAssistantMessage)
       ) {
         return;
       }
@@ -523,6 +524,7 @@ export function useQwenPawChatSession() {
     const assistantMessage = createAssistantMessage('streaming');
 
     state.value.messages.push(userMessage, assistantMessage);
+    const trackedAssistantMessage = getTrackedAssistantMessage(state.value.messages, assistantMessage.id) ?? assistantMessage;
     state.value.isSending = true;
     state.value.errorMessage = null;
     state.value.activeChatStatus = 'running';
@@ -559,12 +561,12 @@ export function useQwenPawChatSession() {
         signal: controller.signal,
         earlyExitSignal: completionController.signal,
         onEvent: (event) => {
-          applyStreamEvent(event, assistantMessage, streamOutcome, messageTypeMap, state.value);
-          scheduleLocalCompletion(assistantMessage, streamOutcome);
+          applyStreamEvent(event, trackedAssistantMessage, streamOutcome, messageTypeMap, state.value);
+          scheduleLocalCompletion(trackedAssistantMessage, streamOutcome);
         },
       });
 
-      finalizeCompletedStream(assistantMessage, streamOutcome, state.value);
+      finalizeCompletedStream(trackedAssistantMessage, streamOutcome, state.value);
       state.value.activeChatStatus = 'idle';
       patchChatSpec(chatSpec.id, {
         status: 'idle',
@@ -581,14 +583,14 @@ export function useQwenPawChatSession() {
       // 所以 localCompletion 路径走的是 try 块 line 567 的 finalizeCompletedStream。
       // 此处只处理真正的 abort（用户点击停止）和其他异常。
       if (isAbortError(error)) {
-        finalizeAbortedAssistantMessage(assistantMessage, state.value);
+        finalizeAbortedAssistantMessage(trackedAssistantMessage, state.value);
         state.value.activeChatStatus = stopRequested.value ? 'idle' : 'interrupted';
         patchChatSpec(chatSpec.id, {
           status: 'idle',
           updated_at: new Date().toISOString(),
         });
 
-        if (!stopRequested.value && !hasVisibleAssistantContent(assistantMessage)) {
+        if (!stopRequested.value && !hasVisibleAssistantContent(trackedAssistantMessage)) {
           restoreComposerState(composerSnapshot);
         } else {
           releaseComposerUploads(composerSnapshot.uploads);
@@ -596,10 +598,13 @@ export function useQwenPawChatSession() {
         return;
       }
 
-      assistantMessage.status = 'error';
-      markSectionsAsReady(assistantMessage);
-      if (!hasVisibleAssistantContent(assistantMessage)) {
-        assistantMessage.content = '未能读取 QwenPaw 的流式回复。';
+      const reactiveMsg = state.value.messages.find(m => m.id === assistantMessage.id);
+      if (reactiveMsg) {
+        reactiveMsg.status = 'error';
+        markSectionsAsReady(reactiveMsg);
+        if (!hasVisibleAssistantContent(reactiveMsg)) {
+          reactiveMsg.content = '未能读取 QwenPaw 的流式回复。';
+        }
       }
       state.value.errorMessage = toErrorMessage(error);
       state.value.activeChatStatus = 'interrupted';
@@ -1038,17 +1043,20 @@ function applyStreamEvent(
   if (event.error || isTerminalFailureStatus(normalizedStatus)) {
     const streamErrorMessage = extractStreamErrorMessage(event);
     streamOutcome.errorMessage = streamErrorMessage;
-    assistantMessage.status = 'error';
-    markSectionsAsReady(assistantMessage);
-    if (!hasVisibleAssistantContent(assistantMessage)) {
-      assistantMessage.content = streamErrorMessage;
+    const reactiveMsg = state.messages.find(m => m.id === assistantMessage.id);
+    if (reactiveMsg) {
+      reactiveMsg.status = 'error';
+      markSectionsAsReady(reactiveMsg);
+      if (!hasVisibleAssistantContent(reactiveMsg)) {
+        reactiveMsg.content = streamErrorMessage;
+      }
     }
     state.errorMessage = streamErrorMessage;
     return;
   }
 
   if (event.object === 'response') {
-    applyResponseOutputMessages(event.output, assistantMessage, streamOutcome);
+    applyResponseOutputMessages(event.output, assistantMessage, streamOutcome, state);
     syncAssistantMirrorContent(assistantMessage);
     return;
   }
@@ -1082,12 +1090,13 @@ function applyMessageEvent(
 ): void {
   const messageId = typeof event.id === 'string' && event.id ? event.id : null;
   const messageType = normalizeMessageType(event.type);
+  const payload = extractToolPayloadRecord(event);
 
   if (messageId && messageType) {
     messageTypeMap.set(messageId, messageType);
   }
 
-  const descriptor = resolveSectionDescriptor(messageType, event.role, null);
+  const descriptor = resolveSectionDescriptor(messageType, event.role, payload);
   if (!messageId || !descriptor) {
     return;
   }
@@ -1098,6 +1107,10 @@ function applyMessageEvent(
       ...(section.meta ?? {}),
       toolName: event.name.trim(),
     };
+  }
+
+  if (payload) {
+    applyToolPayload(section, payload, streamOutcome);
   }
 
   if (Array.isArray(event.content)) {
@@ -1119,7 +1132,7 @@ function applyContentEvent(
 ): void {
   const parentMessageId = typeof event.msg_id === 'string' && event.msg_id ? event.msg_id : null;
   const parentType = parentMessageId ? messageTypeMap.get(parentMessageId) : undefined;
-  const payload = asToolPayload(event.data);
+  const payload = extractToolPayloadRecord(event);
   const descriptor = resolveSectionDescriptor(parentType, event.role, payload);
   const sectionId = parentMessageId ?? `content:${event.id ?? crypto.randomUUID()}`;
 
@@ -1160,6 +1173,7 @@ function applyResponseOutputMessages(
   output: QwenPawStreamEvent['output'],
   assistantMessage: ChatMessage,
   streamOutcome: StreamOutcome,
+  state: ChatState | null = null,
 ): void {
   if (!Array.isArray(output)) {
     return;
@@ -1170,7 +1184,7 @@ function applyResponseOutputMessages(
       continue;
     }
 
-    applyHistoryAssistantMessage(assistantMessage, message, streamOutcome);
+    applyHistoryAssistantMessage(assistantMessage, message, streamOutcome, state);
   }
 }
 
@@ -1265,44 +1279,55 @@ function applyToolPayload(
   }
 }
 
-function finalizeCompletedStream(assistantMessage: ChatMessage, streamOutcome: StreamOutcome, state: ChatState): void {
-  syncAssistantMirrorContent(assistantMessage);
+function finalizeCompletedStream(
+  assistantMessage: ChatMessage,
+  streamOutcome: StreamOutcome,
+  state: ChatState,
+): void {
+  // 必须通过 state ref 的代理修改，否则 Vue 检测不到状态变化
+  const reactiveMsg = state.messages.find(m => m.id === assistantMessage.id);
+  if (!reactiveMsg) return;
 
-  if (assistantMessage.status === 'error') {
-    if (!hasVisibleAssistantContent(assistantMessage)) {
-      assistantMessage.content = streamOutcome.errorMessage || 'QwenPaw 返回了流式错误。';
+  syncAssistantMirrorContent(reactiveMsg);
+
+  if (reactiveMsg.status === 'error') {
+    if (!hasVisibleAssistantContent(reactiveMsg)) {
+      reactiveMsg.content = streamOutcome.errorMessage || 'QwenPaw 返回了流式错误。';
     }
     return;
   }
 
   if (isTerminalFailureStatus(streamOutcome.terminalStatus)) {
-    assistantMessage.status = 'error';
-    markSectionsAsReady(assistantMessage);
-    assistantMessage.content = assistantMessage.content.trim() || streamOutcome.errorMessage || 'QwenPaw 返回了流式错误。';
-    state.errorMessage = streamOutcome.errorMessage || assistantMessage.content;
+    reactiveMsg.status = 'error';
+    markSectionsAsReady(reactiveMsg);
+    reactiveMsg.content = reactiveMsg.content.trim() || streamOutcome.errorMessage || 'QwenPaw 返回了流式错误。';
+    state.errorMessage = streamOutcome.errorMessage || reactiveMsg.content;
     return;
   }
 
   if (streamOutcome.terminalStatus !== 'completed' && !streamOutcome.hasRenderableContent) {
-    assistantMessage.status = 'error';
-    markSectionsAsReady(assistantMessage);
-    assistantMessage.content = 'QwenPaw 在完成前结束了流。';
-    state.errorMessage = assistantMessage.content;
+    reactiveMsg.status = 'error';
+    markSectionsAsReady(reactiveMsg);
+    reactiveMsg.content = 'QwenPaw 在完成前结束了流。';
+    state.errorMessage = reactiveMsg.content;
     return;
   }
 
-  assistantMessage.status = 'ready';
-  markSectionsAsReady(assistantMessage);
+  reactiveMsg.status = 'ready';
+  markSectionsAsReady(reactiveMsg);
 
-  if (!hasVisibleAssistantContent(assistantMessage)) {
-    assistantMessage.content = 'QwenPaw 返回了空响应。';
+  if (!hasVisibleAssistantContent(reactiveMsg)) {
+    reactiveMsg.content = 'QwenPaw 返回了空响应。';
   }
 }
 
 function finalizeAbortedAssistantMessage(assistantMessage: ChatMessage, state: ChatState): void {
-  assistantMessage.status = 'ready';
-  markSectionsAsReady(assistantMessage);
-  syncAssistantMirrorContent(assistantMessage);
+  const reactiveMsg = state.messages.find(m => m.id === assistantMessage.id);
+  if (reactiveMsg) {
+    reactiveMsg.status = 'ready';
+    markSectionsAsReady(reactiveMsg);
+    syncAssistantMirrorContent(reactiveMsg);
+  }
 
   if (hasVisibleAssistantContent(assistantMessage)) {
     return;
@@ -1382,10 +1407,15 @@ function applyHistoryAssistantMessage(
   assistantMessage: ChatMessage,
   message: QwenPawHistoryMessage,
   streamOutcome: StreamOutcome = createStreamOutcome(),
+  state: ChatState | null = null,
 ): void {
-  const descriptor = resolveSectionDescriptor(normalizeMessageType(message.type), message.role ?? undefined, null);
+  const payload = extractToolPayloadRecord(message);
+  const descriptor = resolveSectionDescriptor(normalizeMessageType(message.type), message.role ?? undefined, payload);
   if (descriptor) {
     const section = ensureSection(assistantMessage, message.id || crypto.randomUUID(), descriptor);
+    if (payload) {
+      applyToolPayload(section, payload, streamOutcome);
+    }
     applyContentBlocks(section, assistantMessage, Array.isArray(message.content) ? message.content : [], 'backfill', streamOutcome);
     section.status = normalizeMessageStatus(message.status) === 'streaming' ? 'streaming' : 'ready';
   } else {
@@ -1398,11 +1428,20 @@ function applyHistoryAssistantMessage(
 
   // 回补消息的状态不应覆盖已有的流式状态，只在需要升级时才更新
   const msgStatus = normalizeMessageStatus(message.status);
+  // 通过 state ref 的代理修改，确保 Vue 响应式系统检测到变化
+  const reactiveMsg = state?.messages.find(m => m.id === assistantMessage.id);
   if (msgStatus === 'error') {
-    assistantMessage.status = 'error';
-  } else if (msgStatus === 'ready' && assistantMessage.status === 'streaming') {
-    // 回补消息已就绪且当前正在流式传输时，升级为 ready
-    assistantMessage.status = 'ready';
+    if (reactiveMsg) {
+      reactiveMsg.status = 'error';
+    } else {
+      assistantMessage.status = 'error';
+    }
+  } else if (msgStatus === 'ready' && (reactiveMsg?.status === 'streaming' || assistantMessage.status === 'streaming')) {
+    if (reactiveMsg) {
+      reactiveMsg.status = 'ready';
+    } else {
+      assistantMessage.status = 'ready';
+    }
   }
 
   syncAssistantMirrorContent(assistantMessage);
@@ -1457,7 +1496,7 @@ function resolveReconnectAssistantMessage(messages: ChatMessage[]): ChatMessage 
 
   const message = createAssistantMessage('streaming');
   messages.push(message);
-  return message;
+  return getTrackedAssistantMessage(messages, message.id) ?? message;
 }
 
 function ensureSection(
@@ -1500,7 +1539,7 @@ function resolveSectionDescriptor(
     return { kind: 'tool_result', title: '工具结果' };
   }
 
-  if (messageType === 'message') {
+  if (messageType === 'message' || messageType === 'assistant') {
     return { kind: 'answer', title: '正式应答' };
   }
 
@@ -2002,6 +2041,42 @@ function asToolPayload(value: unknown): QwenPawToolPayload | null {
   }
 
   return value as QwenPawToolPayload;
+}
+
+function extractToolPayloadRecord(value: unknown): QwenPawToolPayload | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of [
+    'data',
+    'function_call',
+    'function_call_output',
+    'plugin_call',
+    'plugin_call_output',
+    'mcp_tool_call',
+    'mcp_tool_call_output',
+  ]) {
+    const payload = asToolPayload(record[key]);
+    if (payload) {
+      return payload;
+    }
+  }
+
+  const directPayload = asToolPayload(record);
+  if (
+    directPayload &&
+    ('call_id' in directPayload || 'name' in directPayload || 'arguments' in directPayload || 'output' in directPayload)
+  ) {
+    return directPayload;
+  }
+
+  return null;
+}
+
+function getTrackedAssistantMessage(messages: ChatMessage[], messageId: string): ChatMessage | null {
+  return messages.find((message) => message.id === messageId) ?? null;
 }
 
 function stringifyToolValue(value: unknown): string {

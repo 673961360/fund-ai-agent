@@ -46,7 +46,8 @@
 - [x] 输入区重构为 composer：附件入口、上传队列、失败重试、录音入口、录音预览、单一主按钮
 - [x] 附件上传支持图片/文件，前端限制 10MB，并兼容上传返回 `filename / file_name`
 - [x] 发送按钮在流式中切换为“停止”，停止时先本地 abort，再 best-effort 调远端 `chat_id` stop
-- [x] skill/tool 流增加 `response.output` 回填与 1s 静默本地收口，避免正式应答已返回但前端一直停在“生成中”
+- [x] skill/tool 流增加 `response.output` 回填，并将 1s 静默本地收口收窄到“正式应答已出现”场景，避免 tool 后静默提前截断正式应答
+- [x] 流式 assistant 更新统一落到响应式 message 实例，修复 `thinking / tool / answer` 分段在浏览器内偶发不刷新的问题
 - [x] 待发送附件支持“立即移除”；上传中的文件改为逐项 `AbortController` 取消，不再被前端禁用
 - [x] 修复附件上传就绪后 `canSubmit` 卡在旧 `uploading` 状态的问题，附件 + 文本组合可正常发送
 - [x] 修复聊天气泡中附件文件名在深色用户消息里不可见的问题，附件改为高对比度文件卡片显示
@@ -60,7 +61,7 @@
 
 ## 阻塞 / 风险
 - 浏览器内的最终交互复核仍待执行；本轮已完成本地 typecheck/build 与 127.0.0.1:8088 的列表、历史、上传与流式 API 烟测
-- `人员交接` 这类 skill/tool 对话的浏览器内复核仍待执行；代码侧已补 server-terminal-first + local-completion fallback，但还未做 UI 端到端点击验证
+- `人员交接` 这类 skill/tool 对话的浏览器内复核仍待执行；代码侧已补 `response.output` 回填、formal-answer-only 的 local completion fallback 与响应式 assistant 流更新，但还未做 UI 端到端点击验证
 - Stop 已改为携带 `chat_id` 的远端 stop 调用，但原型仍以本地 `AbortController` 为主，远端停止继续按 best-effort 处理
 - 新建聊天后的 fresh smoke 观测到一次后端 `response.failed (MODEL_EXECUTION_FAILED)`；该场景下历史仅落盘已提交的 `user` 消息，仍需浏览器内复核前端错误态与刷新恢复表现
 
