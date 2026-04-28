@@ -13,17 +13,17 @@
 
 ## 目录速查
 
-| 路径 | 职责 |
-|------|------|
-| `src/views/ChatView.vue` | 主视图，编排所有子组件和 composable |
-| `src/components/` | UI 组件（Header / Sidebar / MessageList / InputBar / MessageBubble） |
-| `src/composables/use-qwenpaw-chat-session.ts` | **核心文件 ~1900 行**：消息收发、SSE 流、历史、上传、录制 |
-| `src/composables/use-qwenpaw-agents.ts` | Agent 列表加载 |
-| `src/composables/use-qwenpaw-auth.ts` | 认证状态 |
-| `src/styles/chat.css` | 全部样式（~1000 行，含响应式断点） |
-| `../shared/types.ts` | 前后端共享类型定义 |
-| `../shared/qwenpaw-client.ts` | HTTP 客户端（API 调用、配置管理） |
-| `../shared/sse-handler.ts` | SSE / NDJSON 流消费器 |
+| 路径                                          | 职责                                                                 |
+| --------------------------------------------- | -------------------------------------------------------------------- |
+| `src/views/ChatView.vue`                      | 主视图，编排所有子组件和 composable                                  |
+| `src/components/`                             | UI 组件（Header / Sidebar / MessageList / InputBar / MessageBubble） |
+| `src/composables/use-qwenpaw-chat-session.ts` | **核心文件 ~1900 行**：消息收发、SSE 流、历史、上传、录制            |
+| `src/composables/use-qwenpaw-agents.ts`       | Agent 列表加载                                                       |
+| `src/composables/use-qwenpaw-auth.ts`         | 认证状态                                                             |
+| `src/styles/chat.css`                         | 全部样式（~1000 行，含响应式断点）                                   |
+| `../shared/types.ts`                          | 前后端共享类型定义                                                   |
+| `../shared/qwenpaw-client.ts`                 | HTTP 客户端（API 调用、配置管理）                                    |
+| `../shared/sse-handler.ts`                    | SSE / NDJSON 流消费器                                                |
 
 ## 共享模块
 

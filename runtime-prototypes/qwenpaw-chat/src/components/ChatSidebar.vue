@@ -158,9 +158,9 @@ function submitRename(chat: ChatSpec): void {
 function isHistoryActionDisabled(chatId: string): boolean {
   return Boolean(
     props.isSending ||
-      props.isLoadingHistory ||
-      props.deletingChatId === chatId ||
-      props.renamingChatId === chatId,
+    props.isLoadingHistory ||
+    props.deletingChatId === chatId ||
+    props.renamingChatId === chatId,
   );
 }
 </script>
@@ -177,7 +177,12 @@ function isHistoryActionDisabled(chatId: string): boolean {
         @change="handleAgentChange"
       >
         <option value="" disabled>{{ props.areAgentsLoading ? '加载中...' : '请选择' }}</option>
-        <option v-for="agent in props.agents" :key="agent.id" :value="agent.id" :disabled="!agent.enabled">
+        <option
+          v-for="agent in props.agents"
+          :key="agent.id"
+          :value="agent.id"
+          :disabled="!agent.enabled"
+        >
           {{ agent.name }}{{ agent.enabled ? '' : '（已禁用）' }}
         </option>
       </select>
@@ -224,7 +229,9 @@ function isHistoryActionDisabled(chatId: string): boolean {
               />
               <span class="chat-sidebar__history-meta">
                 <span>{{ formatChatTime(chat.updated_at) }}</span>
-                <span v-if="chat.status === 'running'" class="chat-sidebar__history-status">运行中</span>
+                <span v-if="chat.status === 'running'" class="chat-sidebar__history-status"
+                  >运行中</span
+                >
               </span>
             </div>
 
@@ -259,7 +266,9 @@ function isHistoryActionDisabled(chatId: string): boolean {
               <span class="chat-sidebar__history-title">{{ normalizeChatName(chat.name) }}</span>
               <span class="chat-sidebar__history-meta">
                 <span>{{ formatChatTime(chat.updated_at) }}</span>
-                <span v-if="chat.status === 'running'" class="chat-sidebar__history-status">运行中</span>
+                <span v-if="chat.status === 'running'" class="chat-sidebar__history-status"
+                  >运行中</span
+                >
               </span>
             </button>
 
@@ -285,7 +294,9 @@ function isHistoryActionDisabled(chatId: string): boolean {
         </li>
       </ul>
 
-      <p class="chat-sidebar__history-note">删除只会移除聊天条目，不承诺清除底层 JSONSession 状态。</p>
+      <p class="chat-sidebar__history-note">
+        删除只会移除聊天条目，不承诺清除底层 JSONSession 状态。
+      </p>
     </div>
 
     <div v-if="props.requiresLogin" class="chat-sidebar__auth">
@@ -353,7 +364,10 @@ function isHistoryActionDisabled(chatId: string): boolean {
           placeholder="API 地址"
           @input="updateApiBaseUrl"
         />
-        <p v-if="props.apiBaseUrlErrorMessage" class="chat-sidebar__feedback chat-sidebar__feedback--error">
+        <p
+          v-if="props.apiBaseUrlErrorMessage"
+          class="chat-sidebar__feedback chat-sidebar__feedback--error"
+        >
           {{ props.apiBaseUrlErrorMessage }}
         </p>
 

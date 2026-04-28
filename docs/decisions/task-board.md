@@ -86,3 +86,25 @@
 ## 附录
 - [方案详情](solution-proposal.md) — Chat-first 主界面重构执行方案
 - [评审记录](review-notes.md) — 执行验证与阶段记录
+
+## 2026-04-28 Codex update
+- task: `TASK-20260424-007`
+- status: `review_pending`
+- scope:
+  - `runtime-prototypes/qwenpaw-chat`
+  - `runtime-prototypes/shared/fetch-client.ts`
+  - `runtime-prototypes/shared/qwenpaw-client.ts`
+  - `docs/decisions/task-board.md`
+  - `docs/decisions/review-notes.md`
+- completed:
+  - Split `ChatView.vue` runtime config and runtime context coordination into dedicated composables without changing template structure or component contracts.
+  - Split chat-session internals into `history / media / message-helpers / stream / workspace / types` modules while keeping `useQwenPawChatSession()` external API stable.
+  - Kept `fetch` as the prototype request foundation and added a shared request helper for headers, timeout, JSON error parsing, and non-JSON fallback handling.
+  - Added `eslint`, `prettier`, package scripts, and a rewritten prototype README with explicit exemption notes for `router / pinia / Element Plus / Tailwind / axios`.
+- validation:
+  - `npm.cmd run typecheck`
+  - `npm.cmd run lint`
+  - `npm.cmd run format:check`
+  - `npm.cmd run build`
+- pending:
+  - Browser-side manual regression for login, agent switching, history recovery, send/stop, upload retry/removal, recording, Markdown rendering, and mobile layout.

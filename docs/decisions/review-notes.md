@@ -617,3 +617,35 @@ M2 **全部满足**，可视为退出。
   - Manual source inspection of `runtime-prototypes/Python接入QwenPaw聊天接口指南.md`
 - residual risks:
   - The guide now reflects the currently observed local QwenPaw behavior, but other deployments may still emit `function_call`-style top-level payloads first; clients should keep both variants enabled.
+
+---
+
+## 2026-04-28 QwenPaw prototype governance alignment
+- executor: Codex
+- status: review_pending
+- scope:
+  - `runtime-prototypes/qwenpaw-chat/package.json`
+  - `runtime-prototypes/qwenpaw-chat/eslint.config.mjs`
+  - `runtime-prototypes/qwenpaw-chat/prettier.config.mjs`
+  - `runtime-prototypes/qwenpaw-chat/.prettierignore`
+  - `runtime-prototypes/qwenpaw-chat/README.md`
+  - `runtime-prototypes/qwenpaw-chat/src/views/ChatView.vue`
+  - `runtime-prototypes/qwenpaw-chat/src/composables/use-qwenpaw-chat-session.ts`
+  - `runtime-prototypes/qwenpaw-chat/src/composables/use-qwenpaw-runtime-config.ts`
+  - `runtime-prototypes/qwenpaw-chat/src/composables/use-qwenpaw-runtime-context.ts`
+  - `runtime-prototypes/qwenpaw-chat/src/composables/chat-session/*`
+  - `runtime-prototypes/shared/fetch-client.ts`
+  - `runtime-prototypes/shared/qwenpaw-client.ts`
+- summary:
+  - Refactored `ChatView.vue` so runtime config state and runtime context orchestration are moved into dedicated composables while preserving the existing template, props, events, and UI flow.
+  - Broke `use-qwenpaw-chat-session.ts` into smaller internal modules for workspace/history, stream handling, uploads/recording, and message normalization, while keeping `useQwenPawChatSession()` as the unchanged public entry point.
+  - Added `runtime-prototypes/shared/fetch-client.ts` and routed the shared QwenPaw client through it for consistent headers, timeout handling, JSON error parsing, and non-JSON failure fallback, without migrating to `axios`.
+  - Added `eslint`, `prettier`, and README-level prototype exemption notes to make the agreed “fetch retained / no router / no pinia” governance explicit and executable.
+- validation:
+  - `npm.cmd run typecheck`
+  - `npm.cmd run lint`
+  - `npm.cmd run format:check`
+  - `npm.cmd run build`
+- residual risks:
+  - No browser-side click-through regression was run in this turn, so UI behavior for login, agent switching, history restore, upload retry/removal, recording, and mobile layout still needs manual verification.
+  - ESLint is currently scoped to `runtime-prototypes/qwenpaw-chat/src` and `vite.config.ts`; adjacent `runtime-prototypes/shared/*.ts` continues to be validated through `vue-tsc` and `vite build`, not direct lint execution, because the package-local ESLint base path does not cover parent directories.

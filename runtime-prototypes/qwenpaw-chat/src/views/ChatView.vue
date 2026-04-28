@@ -1,5 +1,5 @@
-<script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+﻿<script setup lang="ts">
+import { computed, reactive } from 'vue';
 import ChatHeader from '@/components/ChatHeader.vue';
 import ChatInputBar from '@/components/ChatInputBar.vue';
 import ChatMessageList from '@/components/ChatMessageList.vue';
@@ -7,17 +7,9 @@ import ChatSidebar from '@/components/ChatSidebar.vue';
 import { useQwenPawAgents } from '@/composables/use-qwenpaw-agents';
 import { useQwenPawAuth } from '@/composables/use-qwenpaw-auth';
 import { useQwenPawChatSession } from '@/composables/use-qwenpaw-chat-session';
-import type { RuntimeConfigFormState } from '@/types/chat-ui';
-import {
-  getDefaultQwenPawClientConfig,
-  getQwenPawClientConfig,
-  getQwenPawConnectionInfo,
-  resetStoredQwenPawClientConfig,
-  setStoredQwenPawClientConfig,
-  validateQwenPawApiBaseUrl,
-} from '@proto-shared/qwenpaw-client';
-import type { QwenPawClientConfig } from '@proto-shared/types';
-
+import { useQwenPawRuntimeConfig } from '@/composables/use-qwenpaw-runtime-config';
+import { useQwenPawRuntimeContext } from '@/composables/use-qwenpaw-runtime-context';
+import { getQwenPawConnectionInfo } from '@proto-shared/qwenpaw-client';
 const {
   authState,
   errorMessage: authErrorMessage,
@@ -50,7 +42,6 @@ const {
   deletingChatId,
   draft,
   errorMessage: chatErrorMessage,
-  hasMessages,
   hasPendingUploadsInFlight,
   isLoadingChats,
   isLoadingHistory,
@@ -75,16 +66,31 @@ const loginForm = reactive({
   username: '',
   password: '',
 });
-const runtimeConfig = ref<QwenPawClientConfig>(getQwenPawClientConfig());
-const runtimeConfigForm = reactive<RuntimeConfigFormState>(createRuntimeConfigForm(runtimeConfig.value));
-const apiBaseUrlErrorMessage = ref('');
-const configFeedbackMessage = ref('');
-const isRuntimeConfigExpanded = ref(false);
-
 const isAuthReady = computed(
   () => !authState.value.isLoading && (!authState.value.enabled || authState.value.valid),
 );
 const requiresLogin = computed(() => authState.value.enabled && !authState.value.valid);
+const { refreshRuntimeContext } = useQwenPawRuntimeContext({
+  initialize,
+  isAuthReady,
+  token,
+  loadAgents,
+  resetAgents: reset,
+  selectedAgentId,
+  setActiveAgent,
+});
+const {
+  runtimeConfig,
+  runtimeConfigForm,
+  apiBaseUrlErrorMessage,
+  configFeedbackMessage,
+  isRuntimeConfigExpanded,
+  isConfigDirty,
+  toggleRuntimeConfig,
+  updateRuntimeConfigField,
+  handleSaveConfig,
+  handleResetConfig,
+} = useQwenPawRuntimeConfig(refreshRuntimeContext);
 const isComposerDisabled = computed(
   () =>
     !isAuthReady.value ||
@@ -96,17 +102,9 @@ const isComposerDisabled = computed(
     recordingState.value.status === 'processing',
 );
 const isConfigBusy = computed(
-  () => authState.value.isLoading || areAgentsLoading.value || isSubmitting.value || isSending.value,
+  () =>
+    authState.value.isLoading || areAgentsLoading.value || isSubmitting.value || isSending.value,
 );
-const isConfigDirty = computed(() => {
-  const currentConfig = runtimeConfig.value;
-  return (
-    normalizeText(runtimeConfigForm.apiBaseUrl) !== currentConfig.apiBaseUrl ||
-    normalizeText(runtimeConfigForm.channel) !== currentConfig.channel ||
-    normalizeText(runtimeConfigForm.model) !== currentConfig.model ||
-    normalizeText(runtimeConfigForm.userId) !== currentConfig.userId
-  );
-});
 const connectionInfo = computed(() => getQwenPawConnectionInfo(runtimeConfig.value));
 const combinedErrorMessage = computed(
   () => chatErrorMessage.value ?? agentsErrorMessage.value ?? authErrorMessage.value,
@@ -153,7 +151,9 @@ const conversationStatusTone = computed(() => {
 
   return 'idle' as const;
 });
-const conversationTitle = computed(() => activeChat.value?.name || (selectedAgentId.value ? '新聊天' : 'QwenPaw Chat'));
+const conversationTitle = computed(
+  () => activeChat.value?.name || (selectedAgentId.value ? '新聊天' : 'QwenPaw Chat'),
+);
 const currentAgentName = computed(() => selectedAgent.value?.name || '未选择 Agent');
 const emptyStateDescription = computed(() => {
   if (requiresLogin.value) {
@@ -221,75 +221,8 @@ const inputHelperText = computed(() => {
   return 'Enter 发送，Shift + Enter 换行。';
 });
 
-function syncRuntimeConfig(config: QwenPawClientConfig = getQwenPawClientConfig()): void {
-  runtimeConfig.value = config;
-  runtimeConfigForm.apiBaseUrl = config.apiBaseUrl;
-  runtimeConfigForm.channel = config.channel;
-  runtimeConfigForm.model = config.model;
-  runtimeConfigForm.userId = config.userId;
-}
-
-function clearConfigMessages(): void {
-  apiBaseUrlErrorMessage.value = '';
-  configFeedbackMessage.value = '';
-}
-
-function toggleRuntimeConfig(): void {
-  isRuntimeConfigExpanded.value = !isRuntimeConfigExpanded.value;
-}
-
 function updateLoginField(field: 'username' | 'password', value: string): void {
   loginForm[field] = value;
-}
-
-function updateRuntimeConfigField(field: keyof RuntimeConfigFormState, value: string): void {
-  runtimeConfigForm[field] = value;
-  apiBaseUrlErrorMessage.value = '';
-  configFeedbackMessage.value = '';
-}
-
-async function refreshRuntimeContext(): Promise<void> {
-  await initialize();
-  if (!isAuthReady.value) {
-    return;
-  }
-
-  await loadAgents(token.value);
-  await setActiveAgent(selectedAgentId.value, {
-    token: token.value,
-    force: true,
-  });
-}
-
-async function handleSaveConfig(): Promise<void> {
-  clearConfigMessages();
-
-  const apiBaseUrl = normalizeText(runtimeConfigForm.apiBaseUrl);
-  const apiBaseUrlError = validateQwenPawApiBaseUrl(apiBaseUrl);
-  if (apiBaseUrlError) {
-    apiBaseUrlErrorMessage.value = apiBaseUrlError;
-    return;
-  }
-
-  const nextConfig = setStoredQwenPawClientConfig({
-    apiBaseUrl,
-    channel: normalizeText(runtimeConfigForm.channel) || runtimeConfig.value.channel,
-    model: normalizeText(runtimeConfigForm.model),
-    userId: normalizeText(runtimeConfigForm.userId) || runtimeConfig.value.userId,
-  });
-
-  syncRuntimeConfig(nextConfig);
-  await refreshRuntimeContext();
-  configFeedbackMessage.value = '配置已保存并立即生效。';
-}
-
-async function handleResetConfig(): Promise<void> {
-  clearConfigMessages();
-  resetStoredQwenPawClientConfig();
-  const defaultConfig = getDefaultQwenPawClientConfig();
-  syncRuntimeConfig(defaultConfig);
-  await refreshRuntimeContext();
-  configFeedbackMessage.value = '已恢复默认配置。';
 }
 
 async function handleSendDraft(): Promise<void> {
@@ -324,11 +257,7 @@ async function handleLogin(): Promise<void> {
   }
 
   loginForm.password = '';
-  await loadAgents(token.value);
-  await setActiveAgent(selectedAgentId.value, {
-    token: token.value,
-    force: true,
-  });
+  await refreshRuntimeContext();
 }
 
 function handleAgentSelect(agentId: string): void {
@@ -380,53 +309,6 @@ function handleRetryUpload(uploadId: string): void {
 function handleStartRecording(): void {
   void startRecording();
 }
-
-function createRuntimeConfigForm(config: QwenPawClientConfig): RuntimeConfigFormState {
-  return {
-    apiBaseUrl: config.apiBaseUrl,
-    channel: config.channel,
-    model: config.model,
-    userId: config.userId,
-  };
-}
-
-function normalizeText(value: string): string {
-  return value.trim();
-}
-
-onMounted(() => {
-  syncRuntimeConfig();
-  void initialize();
-});
-
-watch(
-  isAuthReady,
-  (ready) => {
-    if (ready) {
-      void loadAgents(token.value);
-      return;
-    }
-
-    reset();
-    void setActiveAgent(null, { force: true });
-  },
-  { immediate: true },
-);
-
-watch(
-  selectedAgentId,
-  (agentId) => {
-    if (!isAuthReady.value) {
-      return;
-    }
-
-    void setActiveAgent(agentId, {
-      token: token.value,
-      force: true,
-    });
-  },
-  { immediate: true },
-);
 </script>
 
 <template>

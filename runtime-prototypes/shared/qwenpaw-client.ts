@@ -1,6 +1,7 @@
 export const DEFAULT_CHAT_NAME = 'New Chat';
 
 import { consumeResponseStream } from './sse-handler';
+import { fetchResponse, requestJson, requestVoid } from './fetch-client';
 import { uuid } from './uuid';
 import type {
   ChatHistory,
@@ -27,6 +28,8 @@ const DEFAULT_PROXY_PREFIX = '/qwenpaw-api';
 const DEFAULT_USER_ID = 'default_user';
 const DEFAULT_CHANNEL = 'console';
 const PROXY_TARGET_ENV = import.meta.env.VITE_QWENPAW_TARGET;
+const JSON_REQUEST_TIMEOUT_MS = 30_000;
+const UPLOAD_REQUEST_TIMEOUT_MS = 60_000;
 
 export const TOKEN_STORAGE_KEY = 'qwenpaw_auth_token';
 export const USER_STORAGE_KEY = 'qwenpaw_username';
@@ -202,21 +205,23 @@ export function buildConversationSessionId(agentId: string, userId: string): str
 }
 
 export async function fetchAuthStatus(signal?: AbortSignal): Promise<QwenPawAuthStatusResponse> {
-  const response = await fetch(resolveApiUrl('/api/auth/status'), {
-    headers: buildHeaders({ accept: 'application/json' }),
+  return requestJson<QwenPawAuthStatusResponse>({
+    url: resolveApiUrl('/api/auth/status'),
+    accept: 'application/json',
     signal,
+    timeoutMs: JSON_REQUEST_TIMEOUT_MS,
+    fallbackMessage: 'Unable to read QwenPaw auth status.',
   });
-
-  return readJsonResponse<QwenPawAuthStatusResponse>(response, 'Unable to read QwenPaw auth status.');
 }
 
 export async function verifyAuthToken(token: string, signal?: AbortSignal): Promise<boolean> {
-  const response = await fetch(resolveApiUrl('/api/auth/verify'), {
-    headers: buildHeaders({
-      accept: 'application/json',
-      token,
-    }),
+  const response = await fetchResponse({
+    url: resolveApiUrl('/api/auth/verify'),
+    accept: 'application/json',
+    token,
     signal,
+    timeoutMs: JSON_REQUEST_TIMEOUT_MS,
+    timeoutMessage: 'Unable to verify the QwenPaw token.',
   });
 
   return response.ok;
@@ -226,32 +231,27 @@ export async function loginWithPassword(
   request: QwenPawLoginRequest,
   signal?: AbortSignal,
 ): Promise<QwenPawLoginResult> {
-  const response = await fetch(resolveApiUrl('/api/auth/login'), {
+  return requestJson<QwenPawLoginResult>({
+    url: resolveApiUrl('/api/auth/login'),
     method: 'POST',
-    headers: buildHeaders({
-      accept: 'application/json',
-      contentType: 'application/json',
-    }),
+    accept: 'application/json',
+    contentType: 'application/json',
     body: JSON.stringify(request),
     signal,
+    timeoutMs: JSON_REQUEST_TIMEOUT_MS,
+    fallbackMessage: 'Unable to log in to QwenPaw.',
   });
-
-  return readJsonResponse<QwenPawLoginResult>(response, 'Unable to log in to QwenPaw.');
 }
 
 export async function listAgents(token?: string | null, signal?: AbortSignal): Promise<QwenPawAgentSummary[]> {
-  const response = await fetch(resolveApiUrl('/api/agents'), {
-    headers: buildHeaders({
-      accept: 'application/json',
-      token,
-    }),
+  const payload = await requestJson<{ agents?: QwenPawAgentSummary[] }>({
+    url: resolveApiUrl('/api/agents'),
+    accept: 'application/json',
+    token,
     signal,
+    timeoutMs: JSON_REQUEST_TIMEOUT_MS,
+    fallbackMessage: 'Unable to load QwenPaw agents.',
   });
-
-  const payload = await readJsonResponse<{ agents?: QwenPawAgentSummary[] }>(
-    response,
-    'Unable to load QwenPaw agents.',
-  );
 
   return Array.isArray(payload.agents) ? payload.agents : [];
 }
@@ -272,16 +272,15 @@ export async function listChats(
 
   const query = searchParams.toString();
   const path = `/api/agents/${encodeURIComponent(agentId)}/chats${query ? `?${query}` : ''}`;
-  const response = await fetch(resolveApiUrl(path), {
-    headers: buildHeaders({
-      accept: 'application/json',
-      token,
-      agentId,
-    }),
+  const payload = await requestJson<unknown[]>({
+    url: resolveApiUrl(path),
+    accept: 'application/json',
+    token,
+    agentId,
     signal,
+    timeoutMs: JSON_REQUEST_TIMEOUT_MS,
+    fallbackMessage: 'Unable to load QwenPaw chats.',
   });
-
-  const payload = await readJsonResponse<unknown[]>(response, 'Unable to load QwenPaw chats.');
   return Array.isArray(payload) ? payload.map((item) => normalizeChatSpec(item)) : [];
 }
 
@@ -291,19 +290,15 @@ export async function getChatHistory(
   token?: string | null,
   signal?: AbortSignal,
 ): Promise<ChatHistory> {
-  const response = await fetch(
-    resolveApiUrl(`/api/agents/${encodeURIComponent(agentId)}/chats/${encodeURIComponent(chatId)}`),
-    {
-      headers: buildHeaders({
-        accept: 'application/json',
-        token,
-        agentId,
-      }),
-      signal,
-    },
-  );
-
-  const payload = await readJsonResponse<ChatHistory>(response, 'Unable to load QwenPaw chat history.');
+  const payload = await requestJson<ChatHistory>({
+    url: resolveApiUrl(`/api/agents/${encodeURIComponent(agentId)}/chats/${encodeURIComponent(chatId)}`),
+    accept: 'application/json',
+    token,
+    agentId,
+    signal,
+    timeoutMs: JSON_REQUEST_TIMEOUT_MS,
+    fallbackMessage: 'Unable to load QwenPaw chat history.',
+  });
   return {
     messages: Array.isArray(payload.messages) ? payload.messages.map((message) => normalizeHistoryMessage(message)) : [],
     status: payload.status === 'running' ? 'running' : 'idle',
@@ -316,19 +311,18 @@ export async function createChat(
   token?: string | null,
   signal?: AbortSignal,
 ): Promise<ChatSpec> {
-  const response = await fetch(resolveApiUrl(`/api/agents/${encodeURIComponent(agentId)}/chats`), {
+  const payload = await requestJson<unknown>({
+    url: resolveApiUrl(`/api/agents/${encodeURIComponent(agentId)}/chats`),
     method: 'POST',
-    headers: buildHeaders({
-      accept: 'application/json',
-      contentType: 'application/json',
-      token,
-      agentId,
-    }),
+    accept: 'application/json',
+    contentType: 'application/json',
+    token,
+    agentId,
     body: JSON.stringify(data),
     signal,
+    timeoutMs: JSON_REQUEST_TIMEOUT_MS,
+    fallbackMessage: 'Unable to create a QwenPaw chat.',
   });
-
-  const payload = await readJsonResponse<unknown>(response, 'Unable to create a QwenPaw chat.');
   return normalizeChatSpec(payload);
 }
 
@@ -339,22 +333,18 @@ export async function updateChat(
   token?: string | null,
   signal?: AbortSignal,
 ): Promise<ChatSpec> {
-  const response = await fetch(
-    resolveApiUrl(`/api/agents/${encodeURIComponent(agentId)}/chats/${encodeURIComponent(chatId)}`),
-    {
-      method: 'PUT',
-      headers: buildHeaders({
-        accept: 'application/json',
-        contentType: 'application/json',
-        token,
-        agentId,
-      }),
-      body: JSON.stringify(data),
-      signal,
-    },
-  );
-
-  const payload = await readJsonResponse<unknown>(response, 'Unable to update the selected QwenPaw chat.');
+  const payload = await requestJson<unknown>({
+    url: resolveApiUrl(`/api/agents/${encodeURIComponent(agentId)}/chats/${encodeURIComponent(chatId)}`),
+    method: 'PUT',
+    accept: 'application/json',
+    contentType: 'application/json',
+    token,
+    agentId,
+    body: JSON.stringify(data),
+    signal,
+    timeoutMs: JSON_REQUEST_TIMEOUT_MS,
+    fallbackMessage: 'Unable to update the selected QwenPaw chat.',
+  });
   return normalizeChatSpec(payload);
 }
 
@@ -364,22 +354,16 @@ export async function deleteChat(
   token?: string | null,
   signal?: AbortSignal,
 ): Promise<void> {
-  const response = await fetch(
-    resolveApiUrl(`/api/agents/${encodeURIComponent(agentId)}/chats/${encodeURIComponent(chatId)}`),
-    {
-      method: 'DELETE',
-      headers: buildHeaders({
-        accept: 'application/json',
-        token,
-        agentId,
-      }),
-      signal,
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(await buildHttpErrorMessage(response, 'Unable to delete the selected QwenPaw chat.'));
-  }
+  await requestVoid({
+    url: resolveApiUrl(`/api/agents/${encodeURIComponent(agentId)}/chats/${encodeURIComponent(chatId)}`),
+    method: 'DELETE',
+    accept: 'application/json',
+    token,
+    agentId,
+    signal,
+    timeoutMs: JSON_REQUEST_TIMEOUT_MS,
+    fallbackMessage: 'Unable to delete the selected QwenPaw chat.',
+  });
 }
 
 export async function uploadConsoleFile(
@@ -391,31 +375,29 @@ export async function uploadConsoleFile(
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(resolveApiUrl(`/api/agents/${encodeURIComponent(agentId)}/console/upload`), {
+  const payload = await requestJson<Record<string, unknown>>({
+    url: resolveApiUrl(`/api/agents/${encodeURIComponent(agentId)}/console/upload`),
     method: 'POST',
-    headers: buildHeaders({
-      accept: 'application/json',
-      token,
-      agentId,
-    }),
+    accept: 'application/json',
+    token,
+    agentId,
     body: formData,
     signal,
+    timeoutMs: UPLOAD_REQUEST_TIMEOUT_MS,
+    fallbackMessage: 'Unable to upload the selected file.',
   });
-
-  const payload = await readJsonResponse<Record<string, unknown>>(response, 'Unable to upload the selected file.');
   return normalizeUploadedConsoleFile(payload, file.name);
 }
 
 export async function sendQwenPawChat(options: SendChatOptions): Promise<void> {
   const config = getQwenPawClientConfig();
-  const response = await fetch(resolveApiUrl(`/api/agents/${encodeURIComponent(options.agentId)}/console/chat`), {
+  const response = await fetchResponse({
+    url: resolveApiUrl(`/api/agents/${encodeURIComponent(options.agentId)}/console/chat`),
     method: 'POST',
-    headers: buildHeaders({
-      accept: 'text/event-stream',
-      contentType: 'application/json',
-      token: options.token,
-      agentId: options.agentId,
-    }),
+    accept: 'text/event-stream',
+    contentType: 'application/json',
+    token: options.token,
+    agentId: options.agentId,
     body: JSON.stringify(buildConsoleRequest(config, options)),
     signal: options.signal,
   });
@@ -443,47 +425,18 @@ export async function stopQwenPawChat(
   signal?: AbortSignal,
 ): Promise<void> {
   const searchParams = new URLSearchParams({ chat_id: chatId });
-  const response = await fetch(
-    resolveApiUrl(`/api/agents/${encodeURIComponent(agentId)}/console/chat/stop?${searchParams.toString()}`),
-    {
-      method: 'POST',
-      headers: buildHeaders({
-        accept: 'application/json',
-        token,
-        agentId,
-      }),
-      signal,
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(await buildHttpErrorMessage(response, 'Unable to stop the current QwenPaw stream.'));
-  }
-}
-
-function buildHeaders(options: {
-  accept: string;
-  contentType?: string;
-  token?: string | null;
-  agentId?: string;
-}): HeadersInit {
-  const headers: Record<string, string> = {
-    Accept: options.accept,
-  };
-
-  if (options.contentType) {
-    headers['Content-Type'] = options.contentType;
-  }
-
-  if (options.token) {
-    headers.Authorization = `Bearer ${options.token}`;
-  }
-
-  if (options.agentId) {
-    headers['X-Agent-Id'] = options.agentId;
-  }
-
-  return headers;
+  await requestVoid({
+    url: resolveApiUrl(
+      `/api/agents/${encodeURIComponent(agentId)}/console/chat/stop?${searchParams.toString()}`,
+    ),
+    method: 'POST',
+    accept: 'application/json',
+    token,
+    agentId,
+    signal,
+    timeoutMs: JSON_REQUEST_TIMEOUT_MS,
+    fallbackMessage: 'Unable to stop the current QwenPaw stream.',
+  });
 }
 
 function buildConsoleRequest(config: QwenPawClientConfig, options: SendChatOptions): QwenPawConsoleRequest {
@@ -702,48 +655,6 @@ function hasLocalStorage(): boolean {
 
 function hasSessionStorage(): boolean {
   return typeof window !== 'undefined' && typeof window.sessionStorage !== 'undefined';
-}
-
-async function readJsonResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
-  if (!response.ok) {
-    throw new Error(await buildHttpErrorMessage(response, fallbackMessage));
-  }
-
-  return (await response.json()) as T;
-}
-
-async function buildHttpErrorMessage(response: Response, fallbackMessage: string): Promise<string> {
-  const payload = await safeReadText(response);
-  if (!payload) {
-    return fallbackMessage;
-  }
-
-  try {
-    const parsed = JSON.parse(payload) as { detail?: unknown; message?: string };
-    if (typeof parsed.message === 'string' && parsed.message.trim()) {
-      return parsed.message;
-    }
-
-    if (typeof parsed.detail === 'string' && parsed.detail.trim()) {
-      return parsed.detail;
-    }
-
-    if (Array.isArray(parsed.detail) && parsed.detail.length > 0) {
-      return `${fallbackMessage} ${JSON.stringify(parsed.detail)}`;
-    }
-  } catch {
-    return `${fallbackMessage} ${payload}`;
-  }
-
-  return fallbackMessage;
-}
-
-async function safeReadText(response: Response): Promise<string> {
-  try {
-    return await response.text();
-  } catch {
-    return '';
-  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

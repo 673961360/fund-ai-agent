@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  font-family: "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+  font-family: 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color: #162535;
@@ -146,17 +146,17 @@ button {
   color: var(--accent);
 }
 
-.chat-header__badge[data-tone="busy"] {
+.chat-header__badge[data-tone='busy'] {
   background: var(--warning-soft);
   color: var(--warning);
 }
 
-.chat-header__badge[data-tone="error"] {
+.chat-header__badge[data-tone='error'] {
   background: var(--danger-soft);
   color: var(--danger);
 }
 
-.chat-header__badge[data-tone="warning"] {
+.chat-header__badge[data-tone='warning'] {
   background: rgba(155, 104, 39, 0.16);
   color: var(--warning);
 }
@@ -223,7 +223,12 @@ button {
   display: block;
   height: 16px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(22, 37, 53, 0.08), rgba(22, 37, 53, 0.16), rgba(22, 37, 53, 0.08));
+  background: linear-gradient(
+    90deg,
+    rgba(22, 37, 53, 0.08),
+    rgba(22, 37, 53, 0.16),
+    rgba(22, 37, 53, 0.08)
+  );
   background-size: 200% 100%;
   animation: shimmer 1.3s linear infinite;
 }
@@ -240,7 +245,9 @@ button {
   display: flex;
   justify-content: center;
   z-index: 10;
-  transition: opacity 0.2s, transform 0.2s;
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
 }
 
 .chat-message-list__scroll-bottom--hide {
@@ -267,7 +274,9 @@ button {
   cursor: pointer;
   display: grid;
   place-items: center;
-  transition: background 150ms, box-shadow 150ms;
+  transition:
+    background 150ms,
+    box-shadow 150ms;
 }
 
 .chat-message-list__scroll-bottom button:hover {
@@ -388,13 +397,13 @@ button {
 }
 
 .message-bubble__summary::after {
-  content: "展开";
+  content: '展开';
   font-size: 0.72rem;
   color: var(--text-soft);
 }
 
 .message-bubble__details[open] .message-bubble__summary::after {
-  content: "收起";
+  content: '收起';
 }
 
 .message-bubble__summary-title {
@@ -442,7 +451,7 @@ button {
 }
 
 .message-bubble__markdown code {
-  font-family: Consolas, "SFMono-Regular", Menlo, monospace;
+  font-family: Consolas, 'SFMono-Regular', Menlo, monospace;
   font-size: 0.92em;
 }
 
@@ -559,7 +568,7 @@ button {
 }
 
 .message-bubble__streaming::after {
-  content: "";
+  content: '';
   width: 7px;
   height: 7px;
   margin-left: 8px;
@@ -772,7 +781,10 @@ button {
   align-self: flex-end;
   background: var(--brand);
   color: #fff9f0;
-  transition: background 0.15s, opacity 0.15s, transform 120ms ease;
+  transition:
+    background 0.15s,
+    opacity 0.15s,
+    transform 120ms ease;
 }
 
 .chat-input-bar__send-btn:hover:not(:disabled) {
@@ -811,7 +823,11 @@ button {
   border: 0;
   border-radius: 999px;
   font-weight: 700;
-  transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease, background-color 120ms ease,
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    opacity 120ms ease,
+    background-color 120ms ease,
     color 120ms ease;
 }
 
@@ -912,7 +928,10 @@ button {
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.9);
   color: var(--text-primary);
-  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background-color 120ms ease;
 }
 
 .chat-sidebar__control:focus {

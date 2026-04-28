@@ -1,0 +1,6 @@
+dist
+node_modules
+coverage
+edge-dump.html
+.env.local
+.env - 副本.local

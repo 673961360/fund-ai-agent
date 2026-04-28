@@ -87,7 +87,12 @@ function scrollToBottom(): void {
 
 <template>
   <div class="chat-message-list-wrapper">
-    <section ref="containerRef" class="chat-message-list" aria-label="聊天消息流" @scroll="onScroll">
+    <section
+      ref="containerRef"
+      class="chat-message-list"
+      aria-label="聊天消息流"
+      @scroll="onScroll"
+    >
       <div v-if="loading" class="chat-message-list__loading">
         <span class="chat-message-list__loading-line" />
         <span class="chat-message-list__loading-line chat-message-list__loading-line--wide" />
@@ -104,9 +109,25 @@ function scrollToBottom(): void {
       </div>
     </section>
 
-    <div class="chat-message-list__scroll-bottom" :class="showScrollBtn ? 'chat-message-list__scroll-bottom--show' : 'chat-message-list__scroll-bottom--hide'">
+    <div
+      class="chat-message-list__scroll-bottom"
+      :class="
+        showScrollBtn
+          ? 'chat-message-list__scroll-bottom--show'
+          : 'chat-message-list__scroll-bottom--hide'
+      "
+    >
       <button type="button" aria-label="回到底部" @click="scrollToBottom">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <path d="M4 6l4 4 4-4" />
         </svg>
       </button>

@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, ref } from 'vue';
+﻿import { computed, onBeforeUnmount, ref } from 'vue';
 import {
   DEFAULT_CHAT_NAME,
   buildConversationSessionId,
@@ -6,7 +6,6 @@ import {
   deleteChat,
   getChatHistory,
   getQwenPawClientConfig,
-  getStoredActiveChatId,
   listChats,
   reconnectQwenPawChat,
   sendQwenPawChat,
@@ -16,95 +15,60 @@ import {
   uploadConsoleFile,
 } from '@proto-shared/qwenpaw-client';
 import { uuid } from '@proto-shared/uuid';
+import {
+  MAX_UPLOAD_SIZE,
+  buildRequestMessageFromComposer,
+  createIdleRecordingState,
+  createPendingFileUpload,
+  createUnsupportedRecordingState,
+  detectRecordingSupport,
+  extractBase64Payload,
+  guessAudioFormat,
+  hasSendableComposerContent,
+  readBlobAsDataUrl,
+  releaseComposerUploads,
+  resolveRecordingMimeType,
+  revokePendingUpload,
+} from '@/composables/chat-session/media';
+import {
+  applyPreviewUrls,
+  createAssistantMessage,
+  createMessageFromRequestMessage,
+  getTrackedAssistantMessage,
+  hasVisibleAssistantContent,
+  isAbortError,
+  markSectionsAsReady,
+  resolveReconnectAssistantMessage,
+  toErrorMessage,
+} from '@/composables/chat-session/message-helpers';
+import {
+  finalizeCachedMessages,
+  normalizeHistoryMessages,
+} from '@/composables/chat-session/history';
+import {
+  applyStreamEvent,
+  finalizeAbortedAssistantMessage,
+  finalizeCompletedStream,
+} from '@/composables/chat-session/stream';
 import type {
-  ChatTextContentBlock,
-  ChatHistory,
-  ChatMessage,
-  ChatMessageContentBlock,
-  ChatMessageSection,
-  ChatMessageSectionKind,
-  ChatMessageStatus,
-  ChatSpec,
-  ChatState,
-  PendingUpload,
-  QwenPawAudioContentBlock,
-  QwenPawFileContentBlock,
-  QwenPawHistoryMessage,
-  QwenPawImageContentBlock,
-  QwenPawMessageContentBlock,
-  QwenPawRequestContentBlock,
-  QwenPawRequestMessage,
-  QwenPawStreamEvent,
-  QwenPawTextContentBlock as QwenPawTextHistoryContentBlock,
-  QwenPawTextContentBlock,
-  QwenPawToolPayload,
-  RecordingState,
-} from '@proto-shared/types';
-
-const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
-const THINKING_MESSAGE_TYPES = new Set(['reasoning']);
-const TOOL_CALL_MESSAGE_TYPES = new Set(['plugin_call', 'function_call', 'mcp_tool_call']);
-const TOOL_RESULT_MESSAGE_TYPES = new Set([
-  'plugin_call_output',
-  'function_call_output',
-  'mcp_tool_call_output',
-]);
-const RECORDING_MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
-
-interface AgentWorkspaceOptions {
-  token?: string | null;
-  force?: boolean;
-}
-
-interface SendDraftOptions {
-  agentId: string | null;
-  token?: string | null;
-}
-
-interface StopStreamingOptions {
-  agentId: string | null;
-  token?: string | null;
-}
-
-interface OpenChatOptions {
-  agentId: string | null;
-  token?: string | null;
-  force?: boolean;
-}
-
-interface DeleteChatOptions {
-  agentId: string | null;
-  token?: string | null;
-}
-
-interface RenameChatOptions {
-  agentId: string | null;
-  token?: string | null;
-}
-
-interface AddFilesOptions {
-  agentId: string | null;
-  token?: string | null;
-  files: File[];
-}
-
-interface RetryUploadOptions {
-  agentId: string | null;
-  token?: string | null;
-  uploadId: string;
-}
-
-interface StreamOutcome {
-  hasRenderableContent: boolean;
-  terminalStatus: string | null;
-  errorMessage: string | null;
-  resetSessionAfterCompletion: boolean;
-}
-
-interface ComposerSnapshot {
-  draft: string;
-  uploads: PendingUpload[];
-}
+  AddFilesOptions,
+  AgentWorkspaceOptions,
+  ComposerSnapshot,
+  DeleteChatOptions,
+  OpenChatOptions,
+  RenameChatOptions,
+  RetryUploadOptions,
+  SendDraftOptions,
+  StopStreamingOptions,
+} from '@/composables/chat-session/types';
+import {
+  createInitialState,
+  createStreamOutcome,
+  generateChatTitleFromText,
+  resolvePreferredChatId,
+  sortChats,
+} from '@/composables/chat-session/workspace';
+import type { ChatMessage, ChatSpec, ChatState, PendingUpload } from '@proto-shared/types';
 
 export function useQwenPawChatSession() {
   const state = ref<ChatState>(createInitialState());
@@ -125,7 +89,7 @@ export function useQwenPawChatSession() {
   const localCompletionTimer = ref<ReturnType<typeof setTimeout> | null>(null);
   const uploadControllers = new Map<string, AbortController>();
   const cancelledUploadIds = new Set<string>();
-  // 切换离开流式聊天时缓存消息（后端可能尚未持久化）
+  // 鍒囨崲绂诲紑娴佸紡鑱婂ぉ鏃剁紦瀛樻秷鎭紙鍚庣鍙兘灏氭湭鎸佷箙鍖栵級
   const messageCache = new Map<string, ChatMessage[]>();
 
   const hasMessages = computed(() => state.value.messages.length > 0);
@@ -207,7 +171,10 @@ export function useQwenPawChatSession() {
     releaseComposerUploads(uploads);
   }
 
-  async function setActiveAgent(agentId: string | null, options: AgentWorkspaceOptions = {}): Promise<void> {
+  async function setActiveAgent(
+    agentId: string | null,
+    options: AgentWorkspaceOptions = {},
+  ): Promise<void> {
     if (!options.force && activeAgentId.value === agentId) {
       return;
     }
@@ -233,7 +200,7 @@ export function useQwenPawChatSession() {
     }
 
     if (state.value.isSending && state.value.activeChatId !== chatId) {
-      // 缓存当前流式聊天的消息（后端在流完成前不会持久化，切回时需要恢复）
+      // 缂撳瓨褰撳墠娴佸紡鑱婂ぉ鐨勬秷鎭紙鍚庣鍦ㄦ祦瀹屾垚鍓嶄笉浼氭寔涔呭寲锛屽垏鍥炴椂闇€瑕佹仮澶嶏級
       const currentChatId = state.value.activeChatId;
       if (currentChatId) {
         messageCache.set(currentChatId, JSON.parse(JSON.stringify(state.value.messages)));
@@ -293,7 +260,11 @@ export function useQwenPawChatSession() {
     }
   }
 
-  async function renameChatById(chatId: string, name: string, options: RenameChatOptions): Promise<void> {
+  async function renameChatById(
+    chatId: string,
+    name: string,
+    options: RenameChatOptions,
+  ): Promise<void> {
     if (!options.agentId) {
       return;
     }
@@ -395,7 +366,9 @@ export function useQwenPawChatSession() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = resolveRecordingMimeType();
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
 
       recordingStream.value = stream;
       mediaRecorder.value = recorder;
@@ -502,7 +475,12 @@ export function useQwenPawChatSession() {
       return;
     }
 
-    const chatSpec = await ensureActiveChatSpec(options.agentId, runtimeConfig.userId, runtimeConfig.channel, options.token);
+    const chatSpec = await ensureActiveChatSpec(
+      options.agentId,
+      runtimeConfig.userId,
+      runtimeConfig.channel,
+      options.token,
+    );
     if (!chatSpec) {
       restoreComposerState(composerSnapshot);
       return;
@@ -516,7 +494,8 @@ export function useQwenPawChatSession() {
     const assistantMessage = createAssistantMessage('streaming');
 
     state.value.messages.push(userMessage, assistantMessage);
-    const trackedAssistantMessage = getTrackedAssistantMessage(state.value.messages, assistantMessage.id) ?? assistantMessage;
+    const trackedAssistantMessage =
+      getTrackedAssistantMessage(state.value.messages, assistantMessage.id) ?? assistantMessage;
     state.value.isSending = true;
     state.value.errorMessage = null;
     state.value.activeChatStatus = 'running';
@@ -527,11 +506,11 @@ export function useQwenPawChatSession() {
       updated_at: new Date().toISOString(),
     });
 
-    // 首条消息立即生成标题（不等待流完成，避免切换会话时标题丢失）
+    // 棣栨潯娑堟伅绔嬪嵆鐢熸垚鏍囬锛堜笉绛夊緟娴佸畬鎴愶紝閬垮厤鍒囨崲浼氳瘽鏃舵爣棰樹涪澶憋級
     if (isFirstMessage && userText && chatSpec.name === DEFAULT_CHAT_NAME) {
       const autoTitle = generateChatTitleFromText(userText);
       updateChat(options.agentId, chatSpec.id, { name: autoTitle }, options.token)
-        .then(updated => upsertChatSpec(updated))
+        .then((updated) => upsertChatSpec(updated))
         .catch(() => {});
     }
 
@@ -541,12 +520,7 @@ export function useQwenPawChatSession() {
     activeController.value = controller;
     localCompletionController.value = completionController;
 
-    const streamOutcome: StreamOutcome = {
-      hasRenderableContent: false,
-      terminalStatus: null,
-      errorMessage: null,
-      resetSessionAfterCompletion: false,
-    };
+    const streamOutcome = createStreamOutcome();
     const messageTypeMap = new Map<string, string>();
 
     try {
@@ -561,7 +535,13 @@ export function useQwenPawChatSession() {
         signal: controller.signal,
         earlyExitSignal: completionController.signal,
         onEvent: (event) => {
-          applyStreamEvent(event, trackedAssistantMessage, streamOutcome, messageTypeMap, state.value);
+          applyStreamEvent(
+            event,
+            trackedAssistantMessage,
+            streamOutcome,
+            messageTypeMap,
+            state.value,
+          );
         },
       });
 
@@ -578,9 +558,8 @@ export function useQwenPawChatSession() {
 
       releaseComposerUploads(composerSnapshot.uploads);
     } catch (error) {
-      // earlyExitSignal abort 不会抛异常（reader.cancel 是正常返回），
-      // 所以 localCompletion 路径走的是 try 块 line 567 的 finalizeCompletedStream。
-      // 此处只处理真正的 abort（用户点击停止）和其他异常。
+      // earlyExitSignal abort does not throw here; only user-triggered aborts and real errors
+      // need explicit handling in this branch.
       if (isAbortError(error)) {
         finalizeAbortedAssistantMessage(trackedAssistantMessage, state.value);
         state.value.activeChatStatus = stopRequested.value ? 'idle' : 'interrupted';
@@ -597,7 +576,7 @@ export function useQwenPawChatSession() {
         return;
       }
 
-      const reactiveMsg = state.value.messages.find(m => m.id === assistantMessage.id);
+      const reactiveMsg = state.value.messages.find((m) => m.id === assistantMessage.id);
       if (reactiveMsg) {
         reactiveMsg.status = 'error';
         markSectionsAsReady(reactiveMsg);
@@ -655,7 +634,9 @@ export function useQwenPawChatSession() {
     chatList: computed(() => state.value.chatList),
     activeChatId: computed(() => state.value.activeChatId),
     activeChatStatus: computed(() => state.value.activeChatStatus),
-    activeChat: computed(() => state.value.chatList.find((chat) => chat.id === state.value.activeChatId) ?? null),
+    activeChat: computed(
+      () => state.value.chatList.find((chat) => chat.id === state.value.activeChatId) ?? null,
+    ),
     pendingUploads: computed(() => state.value.pendingUploads),
     recordingState: computed(() => state.value.recordingState),
     isSending: computed(() => state.value.isSending),
@@ -756,19 +737,19 @@ export function useQwenPawChatSession() {
       const cached = messageCache.get(chatId);
 
       if (history.status === 'running' && reconnectIfRunning) {
-        // 即将 reconnect：使用后端历史消息作为基础（不含未持久化的助手消息），
-        // reconnect 通过事件回放从零构建助手消息，避免与缓存内容重复叠加
+        // Reconnect from persisted history first, then rebuild assistant output from stream
+        // events to avoid duplicating the cached, not-yet-persisted assistant content.
         state.value.messages = normalizeHistoryMessages(history);
         if (history.messages.length === 0 && cached) {
-          // 后端尚未持久化用户消息，用缓存中的用户消息补上
-          state.value.messages = cached.filter(m => m.role === 'user');
+          // If the backend has not persisted the user turn yet, fall back to the cached copy.
+          state.value.messages = cached.filter((message) => message.role === 'user');
         }
         if (cached) messageCache.delete(chatId);
         state.value.activeChatStatus = 'running';
         patchChatSpec(chatId, { status: 'running' });
         isLoadingHistory.value = false;
 
-        // 等待前一个流的 abort 处理完成（避免 isSending 竞态导致 reconnectActiveChat 直接返回）
+        // Wait for any previous abort cleanup to settle before starting reconnect.
         if (state.value.isSending) {
           await waitForSendingClear();
         }
@@ -793,7 +774,11 @@ export function useQwenPawChatSession() {
     }
   }
 
-  async function reconnectActiveChat(agentId: string, chatSpec: ChatSpec, token?: string | null): Promise<void> {
+  async function reconnectActiveChat(
+    agentId: string,
+    chatSpec: ChatSpec,
+    token?: string | null,
+  ): Promise<void> {
     if (!chatSpec.session_id || state.value.isSending) {
       return;
     }
@@ -812,12 +797,7 @@ export function useQwenPawChatSession() {
     activeController.value = controller;
     localCompletionController.value = completionController;
 
-    const streamOutcome: StreamOutcome = {
-      hasRenderableContent: false,
-      terminalStatus: null,
-      errorMessage: null,
-      resetSessionAfterCompletion: false,
-    };
+    const streamOutcome = createStreamOutcome();
     const messageTypeMap = new Map<string, string>();
 
     try {
@@ -835,7 +815,7 @@ export function useQwenPawChatSession() {
         },
       });
 
-      // 没收到任何事件 → 后端 task 在 reconnect 前已结束，重新加载完整历史
+      // No events arrived, which means the backend task likely finished before reconnect.
       if (!streamOutcome.hasRenderableContent) {
         const freshHistory = await getChatHistory(agentId, chatSpec.id, token ?? undefined);
         if (freshHistory.messages.length > 0) {
@@ -850,7 +830,8 @@ export function useQwenPawChatSession() {
         updated_at: new Date().toISOString(),
       });
     } catch (error) {
-      // earlyExitSignal abort 不会抛异常，localCompletion 路径走 try 块 line 810。
+      // earlyExitSignal abort is handled on the happy path; this branch is for local aborts
+      // and actual reconnect failures.
       if (isAbortError(error)) {
         finalizeAbortedAssistantMessage(assistantMessage, state.value);
         state.value.activeChatStatus = stopRequested.value ? 'idle' : 'interrupted';
@@ -909,7 +890,11 @@ export function useQwenPawChatSession() {
     }
   }
 
-  async function uploadPendingFile(agentId: string, upload: PendingUpload, token?: string | null): Promise<void> {
+  async function uploadPendingFile(
+    agentId: string,
+    upload: PendingUpload,
+    token?: string | null,
+  ): Promise<void> {
     const trackedUpload = getTrackedPendingUpload(upload.id) ?? upload;
 
     if (!trackedUpload.sourceFile) {
@@ -925,7 +910,12 @@ export function useQwenPawChatSession() {
     uploadControllers.set(trackedUpload.id, controller);
 
     try {
-      const result = await uploadConsoleFile(agentId, trackedUpload.sourceFile, token, controller.signal);
+      const result = await uploadConsoleFile(
+        agentId,
+        trackedUpload.sourceFile,
+        token,
+        controller.signal,
+      );
       if (!hasPendingUpload(trackedUpload.id) || cancelledUploadIds.has(trackedUpload.id)) {
         return;
       }
@@ -938,7 +928,11 @@ export function useQwenPawChatSession() {
       nextUpload.fileId = result.fileId;
       nextUpload.name = result.filename || nextUpload.name;
     } catch (error) {
-      if (isAbortError(error) || cancelledUploadIds.has(trackedUpload.id) || !hasPendingUpload(trackedUpload.id)) {
+      if (
+        isAbortError(error) ||
+        cancelledUploadIds.has(trackedUpload.id) ||
+        !hasPendingUpload(trackedUpload.id)
+      ) {
         return;
       }
       const nextUpload = getTrackedPendingUpload(trackedUpload.id);
@@ -959,8 +953,13 @@ export function useQwenPawChatSession() {
     draft.value = '';
     disposePendingUploads(state.value.pendingUploads);
     state.value.pendingUploads = [];
-    if (state.value.recordingState.status !== 'recording' && state.value.recordingState.status !== 'processing') {
-      state.value.recordingState = canRecord.value ? createIdleRecordingState() : createUnsupportedRecordingState();
+    if (
+      state.value.recordingState.status !== 'recording' &&
+      state.value.recordingState.status !== 'processing'
+    ) {
+      state.value.recordingState = canRecord.value
+        ? createIdleRecordingState()
+        : createUnsupportedRecordingState();
     }
   }
 
@@ -1036,7 +1035,9 @@ export function useQwenPawChatSession() {
   }
 
   function patchChatSpec(chatId: string, patch: Partial<ChatSpec>): void {
-    const nextChats = state.value.chatList.map((chat) => (chat.id === chatId ? { ...chat, ...patch } : chat));
+    const nextChats = state.value.chatList.map((chat) =>
+      chat.id === chatId ? { ...chat, ...patch } : chat,
+    );
     state.value.chatList = sortChats(nextChats);
   }
 
@@ -1052,1234 +1053,4 @@ export function useQwenPawChatSession() {
     recordingChunks.value = [];
     recordingMimeType.value = '';
   }
-}
-
-function applyStreamEvent(
-  event: QwenPawStreamEvent,
-  assistantMessage: ChatMessage,
-  streamOutcome: StreamOutcome,
-  messageTypeMap: Map<string, string>,
-  state: ChatState,
-): void {
-  if (event.metadata?.clear_history === true) {
-    streamOutcome.resetSessionAfterCompletion = true;
-  }
-
-  const normalizedStatus = normalizeStatus(event.status);
-  if (isTerminalFailureStatus(normalizedStatus)) {
-    streamOutcome.terminalStatus = normalizedStatus;
-  } else if (event.object === 'response' && normalizedStatus === 'completed') {
-    streamOutcome.terminalStatus = 'completed';
-  }
-
-  if (event.error || isTerminalFailureStatus(normalizedStatus)) {
-    const streamErrorMessage = extractStreamErrorMessage(event);
-    streamOutcome.errorMessage = streamErrorMessage;
-    const reactiveMsg = state.messages.find(m => m.id === assistantMessage.id);
-    if (reactiveMsg) {
-      reactiveMsg.status = 'error';
-      markSectionsAsReady(reactiveMsg);
-      if (!hasVisibleAssistantContent(reactiveMsg)) {
-        reactiveMsg.content = streamErrorMessage;
-      }
-    }
-    state.errorMessage = streamErrorMessage;
-    return;
-  }
-
-  if (event.object === 'response') {
-    applyResponseOutputMessages(event.output, assistantMessage, streamOutcome, state);
-    syncAssistantMirrorContent(assistantMessage);
-    return;
-  }
-
-  if (event.object === 'message') {
-    applyMessageEvent(event, assistantMessage, streamOutcome, messageTypeMap, normalizedStatus);
-    return;
-  }
-
-  if (event.object === 'content') {
-    applyContentEvent(event, assistantMessage, streamOutcome, messageTypeMap);
-    return;
-  }
-
-  if (event.object === 'raw_text' && typeof event.text === 'string') {
-    const section = ensureSection(assistantMessage, 'raw_text', {
-      kind: 'answer',
-      title: '正式应答',
-    });
-    mergeSectionText(section, event.text, 'append', streamOutcome);
-    syncAssistantMirrorContent(assistantMessage);
-  }
-}
-
-function applyMessageEvent(
-  event: QwenPawStreamEvent,
-  assistantMessage: ChatMessage,
-  streamOutcome: StreamOutcome,
-  messageTypeMap: Map<string, string>,
-  normalizedStatus: string | null,
-): void {
-  const messageId = typeof event.id === 'string' && event.id ? event.id : null;
-  const messageType = normalizeMessageType(event.type);
-  const payload = extractToolPayloadRecord(event);
-
-  if (messageId && messageType) {
-    messageTypeMap.set(messageId, messageType);
-  }
-
-  const descriptor = resolveSectionDescriptor(messageType, event.role, payload);
-  if (!messageId || !descriptor) {
-    return;
-  }
-
-  const section = ensureSection(assistantMessage, messageId, descriptor);
-  if (typeof event.name === 'string' && event.name.trim()) {
-    section.meta = {
-      ...(section.meta ?? {}),
-      toolName: event.name.trim(),
-    };
-  }
-
-  if (payload) {
-    applyToolPayload(section, payload, streamOutcome);
-  }
-
-  if (Array.isArray(event.content)) {
-    applyContentBlocks(section, assistantMessage, event.content, 'backfill', streamOutcome);
-  }
-
-  if (normalizedStatus === 'completed') {
-    section.status = 'ready';
-  }
-
-  syncAssistantMirrorContent(assistantMessage);
-}
-
-function applyContentEvent(
-  event: QwenPawStreamEvent,
-  assistantMessage: ChatMessage,
-  streamOutcome: StreamOutcome,
-  messageTypeMap: Map<string, string>,
-): void {
-  const parentMessageId = typeof event.msg_id === 'string' && event.msg_id ? event.msg_id : null;
-  const parentType = parentMessageId ? messageTypeMap.get(parentMessageId) : undefined;
-  const payload = extractToolPayloadRecord(event);
-  const descriptor = resolveSectionDescriptor(parentType, event.role, payload);
-  const sectionId = parentMessageId ?? `content:${event.id ?? uuid()}`;
-
-  if (!descriptor) {
-    return;
-  }
-
-  const section = ensureSection(assistantMessage, sectionId, descriptor);
-  if (typeof event.name === 'string' && event.name.trim()) {
-    section.meta = {
-      ...(section.meta ?? {}),
-      toolName: event.name.trim(),
-    };
-  }
-
-  if (event.type === 'data' && payload) {
-    applyToolPayload(section, payload, streamOutcome);
-  }
-
-  if (typeof event.text === 'string') {
-    mergeSectionText(section, event.text, event.delta === true ? 'append' : 'backfill', streamOutcome);
-  }
-
-  if (event.type !== 'data' && payload) {
-    applyToolPayload(section, payload, streamOutcome);
-  }
-
-  const eventContentBlock = normalizeEventContentBlock(event);
-  if (eventContentBlock && descriptor.kind === 'answer') {
-    appendUniqueContentBlocks(assistantMessage, [eventContentBlock]);
-    streamOutcome.hasRenderableContent = true;
-  }
-
-  syncAssistantMirrorContent(assistantMessage);
-}
-
-function applyResponseOutputMessages(
-  output: QwenPawStreamEvent['output'],
-  assistantMessage: ChatMessage,
-  streamOutcome: StreamOutcome,
-  state: ChatState | null = null,
-): void {
-  if (!Array.isArray(output)) {
-    return;
-  }
-
-  for (const message of normalizeOutputMessages(output)) {
-    if (!isAssistantTurnHistoryMessage(message)) {
-      continue;
-    }
-
-    applyHistoryAssistantMessage(assistantMessage, message, streamOutcome, state);
-  }
-}
-
-function applyContentBlocks(
-  section: ChatMessageSection,
-  assistantMessage: ChatMessage,
-  contentBlocks: QwenPawMessageContentBlock[],
-  mode: 'append' | 'backfill',
-  streamOutcome: StreamOutcome,
-): void {
-  const renderableBlocks: ChatMessageContentBlock[] = [];
-
-  for (const contentBlock of contentBlocks) {
-    if (contentBlock.type === 'text') {
-      const textBlock = contentBlock as QwenPawTextHistoryContentBlock;
-      mergeSectionText(section, textBlock.text ?? '', mode, streamOutcome);
-      continue;
-    }
-
-    if (contentBlock.type === 'data') {
-      const payload = asToolPayload(contentBlock.data);
-      if (payload) {
-        applyToolPayload(section, payload, streamOutcome);
-      }
-      continue;
-    }
-
-    const normalizedBlock = normalizeHistoryContentBlock(contentBlock, 'assistant');
-    if (normalizedBlock) {
-      renderableBlocks.push(normalizedBlock);
-    }
-  }
-
-  if (section.kind === 'answer' && renderableBlocks.length > 0) {
-    appendUniqueContentBlocks(assistantMessage, renderableBlocks);
-    streamOutcome.hasRenderableContent = true;
-  }
-}
-
-function mergeSectionText(
-  section: ChatMessageSection,
-  text: string,
-  mode: 'append' | 'backfill',
-  streamOutcome: StreamOutcome,
-): void {
-  if (!text) {
-    return;
-  }
-
-  if (mode === 'append') {
-    section.content += text;
-  } else if (!section.content.trim()) {
-    section.content = text;
-  }
-
-  if (section.content.length > 0) {
-    section.status = 'streaming';
-    streamOutcome.hasRenderableContent = true;
-  }
-}
-
-function applyToolPayload(
-  section: ChatMessageSection,
-  payload: QwenPawToolPayload,
-  streamOutcome: StreamOutcome,
-): void {
-  const meta = {
-    ...(section.meta ?? {}),
-  };
-
-  if (typeof payload.call_id === 'string' && payload.call_id.trim()) {
-    meta.callId = payload.call_id.trim();
-  }
-
-  if (typeof payload.name === 'string' && payload.name.trim()) {
-    meta.toolName = payload.name.trim();
-  }
-
-  if (section.kind === 'tool_call' && payload.arguments !== undefined) {
-    meta.argumentsText = stringifyToolValue(payload.arguments);
-  }
-
-  if (section.kind === 'tool_result' && payload.output !== undefined) {
-    meta.outputText = stringifyToolValue(payload.output);
-  }
-
-  section.meta = meta;
-  section.content = formatToolSectionContent(section);
-  if (section.content.trim()) {
-    section.status = 'streaming';
-    streamOutcome.hasRenderableContent = true;
-  }
-}
-
-function finalizeCompletedStream(
-  assistantMessage: ChatMessage,
-  streamOutcome: StreamOutcome,
-  state: ChatState,
-): void {
-  // 必须通过 state ref 的代理修改，否则 Vue 检测不到状态变化
-  const reactiveMsg = state.messages.find(m => m.id === assistantMessage.id);
-  if (!reactiveMsg) return;
-
-  syncAssistantMirrorContent(reactiveMsg);
-
-  if (reactiveMsg.status === 'error') {
-    if (!hasVisibleAssistantContent(reactiveMsg)) {
-      reactiveMsg.content = streamOutcome.errorMessage || 'QwenPaw 返回了流式错误。';
-    }
-    return;
-  }
-
-  if (isTerminalFailureStatus(streamOutcome.terminalStatus)) {
-    reactiveMsg.status = 'error';
-    markSectionsAsReady(reactiveMsg);
-    reactiveMsg.content = reactiveMsg.content.trim() || streamOutcome.errorMessage || 'QwenPaw 返回了流式错误。';
-    state.errorMessage = streamOutcome.errorMessage || reactiveMsg.content;
-    return;
-  }
-
-  if (streamOutcome.terminalStatus !== 'completed' && !streamOutcome.hasRenderableContent) {
-    reactiveMsg.status = 'error';
-    markSectionsAsReady(reactiveMsg);
-    reactiveMsg.content = 'QwenPaw 在完成前结束了流。';
-    state.errorMessage = reactiveMsg.content;
-    return;
-  }
-
-  reactiveMsg.status = 'ready';
-  markSectionsAsReady(reactiveMsg);
-
-  if (!hasVisibleAssistantContent(reactiveMsg)) {
-    reactiveMsg.content = 'QwenPaw 返回了空响应。';
-  }
-}
-
-function finalizeAbortedAssistantMessage(assistantMessage: ChatMessage, state: ChatState): void {
-  const reactiveMsg = state.messages.find(m => m.id === assistantMessage.id);
-  if (reactiveMsg) {
-    reactiveMsg.status = 'ready';
-    markSectionsAsReady(reactiveMsg);
-    syncAssistantMirrorContent(reactiveMsg);
-  }
-
-  if (hasVisibleAssistantContent(assistantMessage)) {
-    return;
-  }
-
-  state.messages = state.messages.filter((message) => message.id !== assistantMessage.id);
-}
-
-function createStreamOutcome(): StreamOutcome {
-  return {
-    hasRenderableContent: false,
-    terminalStatus: null,
-    errorMessage: null,
-    resetSessionAfterCompletion: false,
-  };
-}
-
-function normalizeOutputMessages(output: QwenPawStreamEvent['output']): QwenPawHistoryMessage[] {
-  if (!Array.isArray(output)) {
-    return [];
-  }
-
-  return output
-    .filter((value): value is Record<string, unknown> => Boolean(value && typeof value === 'object' && !Array.isArray(value)))
-    .map((record) => ({
-      ...(record as QwenPawHistoryMessage),
-      id: typeof record.id === 'string' && record.id ? record.id : uuid(),
-      role: normalizeHistoryRole(record.role),
-      content: Array.isArray(record.content) ? (record.content as QwenPawMessageContentBlock[]) : null,
-    }));
-}
-
-function normalizeHistoryRole(value: unknown): 'assistant' | 'system' | 'tool' | 'user' | null {
-  if (value !== 'assistant' && value !== 'system' && value !== 'tool' && value !== 'user') {
-    return null;
-  }
-
-  return value;
-}
-
-function isAssistantTurnHistoryMessage(message: QwenPawHistoryMessage): boolean {
-  const role = message.role ?? null;
-  if (role === 'assistant' || role === 'tool') {
-    return true;
-  }
-
-  const messageType = normalizeMessageType(message.type);
-  return role === 'system' && Boolean(messageType && TOOL_RESULT_MESSAGE_TYPES.has(messageType));
-}
-
-function finalizeCachedMessages(messages: ChatMessage[]): ChatMessage[] {
-  for (const msg of messages) {
-    if (msg.role === 'assistant' && msg.status === 'streaming') {
-      msg.status = 'ready';
-      if (msg.sections) {
-        for (const section of msg.sections) {
-          if (section.status === 'streaming') {
-            section.status = 'ready';
-          }
-        }
-      }
-    }
-  }
-  return messages;
-}
-
-function normalizeHistoryMessages(history: ChatHistory): ChatMessage[] {
-  const result: ChatMessage[] = [];
-  let activeAssistantTurn: ChatMessage | null = null;
-
-  for (const message of history.messages) {
-    const role = message.role ?? null;
-    if (role === 'user' || (role === 'system' && !isAssistantTurnHistoryMessage(message))) {
-      activeAssistantTurn = null;
-      result.push(createHistoryPrimaryMessage(message, role));
-      continue;
-    }
-
-    if (isAssistantTurnHistoryMessage(message)) {
-      if (!activeAssistantTurn) {
-        activeAssistantTurn = createAssistantMessage(normalizeMessageStatus(message.status));
-        result.push(activeAssistantTurn);
-      }
-
-      applyHistoryAssistantMessage(activeAssistantTurn, message);
-    }
-  }
-
-  return result.filter((message) => message.role !== 'assistant' || hasVisibleAssistantContent(message));
-}
-
-function applyHistoryAssistantMessage(
-  assistantMessage: ChatMessage,
-  message: QwenPawHistoryMessage,
-  streamOutcome: StreamOutcome = createStreamOutcome(),
-  state: ChatState | null = null,
-): void {
-  const payload = extractToolPayloadRecord(message);
-  const descriptor = resolveSectionDescriptor(normalizeMessageType(message.type), message.role ?? undefined, payload);
-  if (descriptor) {
-    const section = ensureSection(assistantMessage, message.id || uuid(), descriptor);
-    if (payload) {
-      applyToolPayload(section, payload, streamOutcome);
-    }
-    applyContentBlocks(section, assistantMessage, Array.isArray(message.content) ? message.content : [], 'backfill', streamOutcome);
-    section.status = normalizeMessageStatus(message.status) === 'streaming' ? 'streaming' : 'ready';
-  } else {
-    const normalizedBlocks = toUiContentBlocks(Array.isArray(message.content) ? message.content : [], 'assistant');
-    appendUniqueContentBlocks(assistantMessage, normalizedBlocks);
-    if (normalizedBlocks.length > 0) {
-      streamOutcome.hasRenderableContent = true;
-    }
-  }
-
-  // 回补消息的状态不应覆盖已有的流式状态，只在需要升级时才更新
-  const msgStatus = normalizeMessageStatus(message.status);
-  // 通过 state ref 的代理修改，确保 Vue 响应式系统检测到变化
-  const reactiveMsg = state?.messages.find(m => m.id === assistantMessage.id);
-  if (msgStatus === 'error') {
-    if (reactiveMsg) {
-      reactiveMsg.status = 'error';
-    } else {
-      assistantMessage.status = 'error';
-    }
-  } else if (msgStatus === 'ready' && (reactiveMsg?.status === 'streaming' || assistantMessage.status === 'streaming')) {
-    if (reactiveMsg) {
-      reactiveMsg.status = 'ready';
-    } else {
-      assistantMessage.status = 'ready';
-    }
-  }
-
-  syncAssistantMirrorContent(assistantMessage);
-}
-
-function createHistoryPrimaryMessage(message: QwenPawHistoryMessage, role: 'user' | 'system'): ChatMessage {
-  const blocks = toUiContentBlocks(Array.isArray(message.content) ? message.content : [], role);
-  return {
-    id: message.id || uuid(),
-    role,
-    content: extractPlainTextFromBlocks(blocks),
-    contentBlocks: blocks,
-    createdAt: new Date().toISOString(),
-    status: normalizeMessageStatus(message.status),
-  };
-}
-
-function applyPreviewUrls(message: ChatMessage, uploads: PendingUpload[]): void {
-  const previewMap = new Map<string, string>();
-  for (const upload of uploads) {
-    if (upload.kind === 'image' && upload.previewUrl && upload.remoteUrl) {
-      previewMap.set(upload.remoteUrl, upload.previewUrl);
-    }
-  }
-  if (previewMap.size === 0) return;
-  for (const block of message.contentBlocks) {
-    if (block.type === 'image' && block.imageUrl && previewMap.has(block.imageUrl)) {
-      block.imageUrl = previewMap.get(block.imageUrl)!;
-    }
-  }
-}
-
-function createMessageFromRequestMessage(
-  message: Pick<QwenPawRequestMessage, 'role' | 'content'>,
-  status: ChatMessageStatus,
-): ChatMessage {
-  const blocks = requestBlocksToUiBlocks(message.content, message.role);
-  return {
-    id: uuid(),
-    role: message.role,
-    content: extractPlainTextFromBlocks(blocks),
-    contentBlocks: blocks,
-    createdAt: new Date().toISOString(),
-    status,
-    sections: message.role === 'assistant' ? [] : undefined,
-  };
-}
-
-function createAssistantMessage(status: ChatMessageStatus): ChatMessage {
-  return {
-    id: uuid(),
-    role: 'assistant',
-    content: '',
-    contentBlocks: [],
-    createdAt: new Date().toISOString(),
-    status,
-    sections: [],
-  };
-}
-
-function resolveReconnectAssistantMessage(messages: ChatMessage[]): ChatMessage {
-  const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
-  if (lastAssistant) {
-    lastAssistant.status = 'streaming';
-    return lastAssistant;
-  }
-
-  const message = createAssistantMessage('streaming');
-  messages.push(message);
-  return getTrackedAssistantMessage(messages, message.id) ?? message;
-}
-
-function ensureSection(
-  assistantMessage: ChatMessage,
-  sectionId: string,
-  descriptor: { kind: ChatMessageSectionKind; title: string },
-): ChatMessageSection {
-  const sections = assistantMessage.sections ?? (assistantMessage.sections = []);
-  const existingSection = sections.find((section) => section.id === sectionId);
-  if (existingSection) {
-    return existingSection;
-  }
-
-  const section: ChatMessageSection = {
-    id: sectionId,
-    kind: descriptor.kind,
-    title: descriptor.title,
-    content: '',
-    status: 'streaming',
-    meta: {},
-  };
-  sections.push(section);
-  return section;
-}
-
-function resolveSectionDescriptor(
-  messageType: string | undefined,
-  role: string | undefined,
-  payload: QwenPawToolPayload | null,
-): { kind: ChatMessageSectionKind; title: string } | null {
-  if (messageType && THINKING_MESSAGE_TYPES.has(messageType)) {
-    return { kind: 'thinking', title: '思考过程' };
-  }
-
-  if (messageType && TOOL_CALL_MESSAGE_TYPES.has(messageType)) {
-    return { kind: 'tool_call', title: '工具调用' };
-  }
-
-  if (messageType && TOOL_RESULT_MESSAGE_TYPES.has(messageType)) {
-    return { kind: 'tool_result', title: '工具结果' };
-  }
-
-  if (messageType === 'message' || messageType === 'assistant') {
-    return { kind: 'answer', title: '正式应答' };
-  }
-
-  if (payload) {
-    if (payload.output !== undefined) {
-      return { kind: 'tool_result', title: '工具结果' };
-    }
-
-    if (payload.arguments !== undefined || payload.call_id !== undefined || payload.name !== undefined) {
-      return { kind: 'tool_call', title: '工具调用' };
-    }
-  }
-
-  if (role === 'assistant') {
-    return { kind: 'answer', title: '正式应答' };
-  }
-
-  if (role === 'tool') {
-    return { kind: 'tool_result', title: '工具结果' };
-  }
-
-  return null;
-}
-
-function syncAssistantMirrorContent(assistantMessage: ChatMessage): void {
-  const answerSections = (assistantMessage.sections ?? [])
-    .filter((section) => section.kind === 'answer' && section.content.length > 0)
-    .map((section) => section.content);
-
-  if (answerSections.length > 0) {
-    assistantMessage.content = answerSections.join('\n\n');
-    return;
-  }
-
-  const textBlocks = assistantMessage.contentBlocks.filter((block) => block.type === 'text') as ChatTextContentBlock[];
-  if (textBlocks.length > 0) {
-    assistantMessage.content = textBlocks.map((block) => block.text).join('\n\n');
-    return;
-  }
-
-  if (assistantMessage.status !== 'error') {
-    assistantMessage.content = '';
-  }
-}
-
-function formatToolSectionContent(section: ChatMessageSection): string {
-  const lines: string[] = [];
-
-  if (section.meta?.toolName) {
-    lines.push(`工具：${section.meta.toolName}`);
-  }
-
-  if (section.meta?.callId) {
-    lines.push(`调用 ID：${section.meta.callId}`);
-  }
-
-  if (section.kind === 'tool_call' && section.meta?.argumentsText) {
-    lines.push('参数：');
-    lines.push(section.meta.argumentsText);
-  }
-
-  if (section.kind === 'tool_result' && section.meta?.outputText) {
-    lines.push('结果：');
-    lines.push(section.meta.outputText);
-  }
-
-  return lines.join('\n');
-}
-
-function markSectionsAsReady(message: ChatMessage): void {
-  for (const section of message.sections ?? []) {
-    if (section.status === 'streaming') {
-      section.status = 'ready';
-    }
-  }
-}
-
-function hasVisibleAssistantContent(message: ChatMessage): boolean {
-  if (message.content.trim()) {
-    return true;
-  }
-
-  if (message.contentBlocks.length > 0) {
-    return true;
-  }
-
-  return (message.sections ?? []).some((section) => section.content.trim().length > 0);
-}
-
-function hasRenderableAnswerContent(message: ChatMessage): boolean {
-  if (message.content.trim()) {
-    return true;
-  }
-
-  if (message.contentBlocks.length > 0) {
-    return true;
-  }
-
-  return (message.sections ?? []).some(
-    (section) => section.kind === 'answer' && section.content.trim().length > 0,
-  );
-}
-
-function createInitialState(): ChatState {
-  return {
-    messages: [],
-    isSending: false,
-    errorMessage: null,
-    activeChatId: null,
-    activeSessionId: null,
-    activeChatStatus: 'idle',
-    chatList: [],
-    pendingUploads: [],
-    recordingState: detectRecordingSupport() ? createIdleRecordingState() : createUnsupportedRecordingState(),
-  };
-}
-
-function createIdleRecordingState(): RecordingState {
-  return {
-    status: 'idle',
-    errorMessage: '',
-  };
-}
-
-function createUnsupportedRecordingState(): RecordingState {
-  return {
-    status: 'unsupported',
-    errorMessage: '当前浏览器不支持录音。',
-  };
-}
-
-function detectRecordingSupport(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof navigator !== 'undefined' &&
-    typeof MediaRecorder !== 'undefined' &&
-    Boolean(navigator.mediaDevices?.getUserMedia)
-  );
-}
-
-function resolveRecordingMimeType(): string {
-  if (typeof MediaRecorder === 'undefined') {
-    return '';
-  }
-
-  for (const mimeType of RECORDING_MIME_TYPES) {
-    if (MediaRecorder.isTypeSupported(mimeType)) {
-      return mimeType;
-    }
-  }
-
-  return '';
-}
-
-function createPendingFileUpload(file: File): PendingUpload {
-  return {
-    id: uuid(),
-    kind: file.type.startsWith('image/') ? 'image' : 'file',
-    name: file.name,
-    size: file.size,
-    status: 'uploading',
-    mimeType: file.type,
-    sourceFile: file,
-    previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
-    errorMessage: '',
-  };
-}
-
-function revokePendingUpload(upload: PendingUpload): void {
-  if (upload.previewUrl?.startsWith('blob:')) {
-    URL.revokeObjectURL(upload.previewUrl);
-  }
-}
-
-function releaseComposerUploads(uploads: PendingUpload[]): void {
-  for (const upload of uploads) {
-    revokePendingUpload(upload);
-  }
-}
-
-function hasSendableComposerContent(snapshot: ComposerSnapshot): boolean {
-  const hasText = snapshot.draft.trim().length > 0;
-  const hasReadyUploads = snapshot.uploads.some((upload) => upload.status === 'ready');
-  return hasText || hasReadyUploads;
-}
-
-function buildRequestMessageFromComposer(snapshot: ComposerSnapshot): Pick<QwenPawRequestMessage, 'role' | 'content'> | null {
-  const content: QwenPawRequestContentBlock[] = [];
-  const text = snapshot.draft.trim();
-
-  if (text) {
-    content.push({
-      type: 'text',
-      text,
-    });
-  }
-
-  for (const upload of snapshot.uploads) {
-    if (upload.status !== 'ready') {
-      continue;
-    }
-
-    if (upload.kind === 'image' && upload.remoteUrl) {
-      content.push({
-        type: 'image',
-        image_url: upload.remoteUrl,
-      });
-      continue;
-    }
-
-    if (upload.kind === 'file' && upload.remoteUrl) {
-      content.push({
-        type: 'file',
-        file_url: upload.remoteUrl,
-        file_id: upload.fileId,
-        filename: upload.name,
-      });
-      continue;
-    }
-
-    if (upload.kind === 'audio' && upload.data && upload.format) {
-      content.push({
-        type: 'audio',
-        data: upload.data,
-        format: upload.format,
-      });
-    }
-  }
-
-  if (content.length === 0) {
-    return null;
-  }
-
-  return {
-    role: 'user',
-    content,
-  };
-}
-
-function requestBlocksToUiBlocks(
-  contentBlocks: QwenPawRequestContentBlock[],
-  role: QwenPawRequestMessage['role'],
-): ChatMessageContentBlock[] {
-  const result: ChatMessageContentBlock[] = [];
-
-  for (const contentBlock of contentBlocks) {
-    if (contentBlock.type === 'text') {
-      result.push({
-        id: uuid(),
-        type: 'text',
-        text: contentBlock.text,
-        format: role === 'assistant' ? 'markdown' : 'plain',
-      });
-      continue;
-    }
-
-    if (contentBlock.type === 'image') {
-      result.push({
-        id: uuid(),
-        type: 'image',
-        imageUrl: contentBlock.image_url,
-      });
-      continue;
-    }
-
-    if (contentBlock.type === 'file') {
-      const fileUrl = contentBlock.file_url || buildGenericDataUrl(contentBlock.file_data);
-      if (!fileUrl) {
-        continue;
-      }
-
-      result.push({
-        id: uuid(),
-        type: 'file',
-        fileUrl,
-        filename: contentBlock.filename,
-        fileId: contentBlock.file_id,
-      });
-      continue;
-    }
-
-    if (contentBlock.type === 'audio') {
-      result.push({
-        id: uuid(),
-        type: 'audio',
-        data: contentBlock.data,
-        format: contentBlock.format,
-        dataUrl: buildAudioDataUrl(contentBlock.data, contentBlock.format),
-      });
-    }
-  }
-
-  return result;
-}
-
-function toUiContentBlocks(contentBlocks: QwenPawMessageContentBlock[], role: 'assistant' | 'system' | 'user'): ChatMessageContentBlock[] {
-  const result: ChatMessageContentBlock[] = [];
-
-  for (const contentBlock of contentBlocks) {
-    const normalized = normalizeHistoryContentBlock(contentBlock, role);
-    if (normalized) {
-      result.push(normalized);
-    }
-  }
-
-  return result;
-}
-
-function normalizeHistoryContentBlock(
-  contentBlock: QwenPawMessageContentBlock,
-  role: 'assistant' | 'system' | 'user',
-): ChatMessageContentBlock | null {
-  if (contentBlock.type === 'text') {
-    const textBlock = contentBlock as QwenPawTextHistoryContentBlock;
-    const text = textBlock.text ?? '';
-    if (!text) {
-      return null;
-    }
-
-    return {
-      id: uuid(),
-      type: 'text',
-      text,
-      format: role === 'assistant' ? 'markdown' : 'plain',
-    };
-  }
-
-  if (contentBlock.type === 'image') {
-    const imageBlock = contentBlock as QwenPawImageContentBlock;
-    if (!imageBlock.image_url) {
-      return null;
-    }
-
-    return {
-      id: uuid(),
-      type: 'image',
-      imageUrl: imageBlock.image_url,
-    };
-  }
-
-  if (contentBlock.type === 'file') {
-    const fileBlock = contentBlock as QwenPawFileContentBlock;
-    const fileUrl = fileBlock.file_url || buildGenericDataUrl(fileBlock.file_data ?? undefined);
-    if (!fileUrl) {
-      return null;
-    }
-
-    return {
-      id: uuid(),
-      type: 'file',
-      fileUrl,
-      filename: fileBlock.filename ?? undefined,
-      fileId: fileBlock.file_id ?? undefined,
-    };
-  }
-
-  if (contentBlock.type === 'audio') {
-    const audioBlock = contentBlock as QwenPawAudioContentBlock;
-    if (!audioBlock.data || !audioBlock.format) {
-      return null;
-    }
-
-    return {
-      id: uuid(),
-      type: 'audio',
-      data: audioBlock.data,
-      format: audioBlock.format,
-      dataUrl: buildAudioDataUrl(audioBlock.data, audioBlock.format),
-    };
-  }
-
-  return null;
-}
-
-function normalizeEventContentBlock(event: QwenPawStreamEvent): ChatMessageContentBlock | null {
-  if (event.type === 'image' && typeof event.image_url === 'string' && event.image_url.trim()) {
-    return {
-      id: uuid(),
-      type: 'image',
-      imageUrl: event.image_url,
-    };
-  }
-
-  if (event.type === 'file') {
-    const fileUrl = typeof event.file_url === 'string' ? event.file_url : '';
-    if (!fileUrl) {
-      return null;
-    }
-
-    return {
-      id: uuid(),
-      type: 'file',
-      fileUrl,
-      filename: typeof event.filename === 'string' ? event.filename : undefined,
-      fileId: typeof event.file_id === 'string' ? event.file_id : undefined,
-    };
-  }
-
-  if (event.type === 'audio' && typeof event.data === 'string' && typeof event.format === 'string') {
-    return {
-      id: uuid(),
-      type: 'audio',
-      data: event.data,
-      format: event.format,
-      dataUrl: buildAudioDataUrl(event.data, event.format),
-    };
-  }
-
-  return null;
-}
-
-function appendUniqueContentBlocks(message: ChatMessage, contentBlocks: ChatMessageContentBlock[]): void {
-  for (const contentBlock of contentBlocks) {
-    const key = buildContentBlockKey(contentBlock);
-    const hasExisting = message.contentBlocks.some((existingBlock) => buildContentBlockKey(existingBlock) === key);
-    if (!hasExisting) {
-      message.contentBlocks.push(contentBlock);
-    }
-  }
-}
-
-function buildContentBlockKey(contentBlock: ChatMessageContentBlock): string {
-  if (contentBlock.type === 'text') {
-    return `text:${contentBlock.format}:${contentBlock.text}`;
-  }
-
-  if (contentBlock.type === 'image') {
-    return `image:${contentBlock.imageUrl}`;
-  }
-
-  if (contentBlock.type === 'file') {
-    return `file:${contentBlock.fileUrl}:${contentBlock.filename ?? ''}`;
-  }
-
-  return `audio:${contentBlock.format}:${contentBlock.data.slice(0, 48)}`;
-}
-
-function normalizeMessageType(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-
-  const normalizedValue = value.trim().toLowerCase();
-  return normalizedValue || undefined;
-}
-
-function normalizeStatus(value: unknown): string | null {
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  return value.toLowerCase();
-}
-
-function normalizeMessageStatus(value: unknown): ChatMessageStatus {
-  const normalized = normalizeStatus(value);
-  if (normalized === 'failed' || normalized === 'rejected') {
-    return 'error';
-  }
-
-  if (normalized === 'created' || normalized === 'in_progress' || normalized === 'running') {
-    return 'streaming';
-  }
-
-  return 'ready';
-}
-
-function isTerminalFailureStatus(value: string | null): boolean {
-  if (!value) {
-    return false;
-  }
-
-  return ['failed', 'canceled', 'cancelled', 'rejected'].includes(value);
-}
-
-function extractStreamErrorMessage(event: QwenPawStreamEvent): string {
-  if (typeof event.error === 'string' && event.error.trim()) {
-    return event.error;
-  }
-
-  if (event.error && typeof event.error === 'object' && typeof event.error.message === 'string') {
-    return event.error.message;
-  }
-
-  if (typeof event.text === 'string' && event.text.trim()) {
-    return event.text;
-  }
-
-  if (typeof event.status === 'string') {
-    return `QwenPaw stream ${event.status}.`;
-  }
-
-  return 'QwenPaw reported a stream error.';
-}
-
-function asToolPayload(value: unknown): QwenPawToolPayload | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as QwenPawToolPayload;
-}
-
-function extractToolPayloadRecord(value: unknown): QwenPawToolPayload | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null;
-  }
-
-  const record = value as Record<string, unknown>;
-  for (const key of [
-    'data',
-    'function_call',
-    'function_call_output',
-    'plugin_call',
-    'plugin_call_output',
-    'mcp_tool_call',
-    'mcp_tool_call_output',
-  ]) {
-    const payload = asToolPayload(record[key]);
-    if (payload) {
-      return payload;
-    }
-  }
-
-  const directPayload = asToolPayload(record);
-  if (
-    directPayload &&
-    ('call_id' in directPayload || 'name' in directPayload || 'arguments' in directPayload || 'output' in directPayload)
-  ) {
-    return directPayload;
-  }
-
-  return null;
-}
-
-function getTrackedAssistantMessage(messages: ChatMessage[], messageId: string): ChatMessage | null {
-  return messages.find((message) => message.id === messageId) ?? null;
-}
-
-function stringifyToolValue(value: unknown): string {
-  if (typeof value === 'string') {
-    const trimmedValue = value.trim();
-    if (!trimmedValue) {
-      return '';
-    }
-
-    if ((trimmedValue.startsWith('{') || trimmedValue.startsWith('[')) && isJson(trimmedValue)) {
-      return JSON.stringify(JSON.parse(trimmedValue), null, 2);
-    }
-
-    return value;
-  }
-
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value ?? '');
-  }
-}
-
-function isJson(value: string): boolean {
-  try {
-    JSON.parse(value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'AbortError';
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  return 'Unknown chat error.';
-}
-
-function sortChats(chats: ChatSpec[]): ChatSpec[] {
-  return [...chats].sort((left, right) => {
-    if (left.pinned !== right.pinned) {
-      return left.pinned ? -1 : 1;
-    }
-
-    return new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime();
-  });
-}
-
-function generateChatTitleFromText(text: string): string {
-  const normalized = text.replace(/\s+/g, ' ').trim();
-  if (!normalized) return '新聊天';
-  const MAX = 30;
-  if (normalized.length <= MAX) return normalized;
-  const truncated = normalized.slice(0, MAX);
-  const lastSpace = truncated.lastIndexOf(' ');
-  if (lastSpace > MAX * 0.5) return truncated.slice(0, lastSpace) + '...';
-  return truncated + '...';
-}
-
-function resolvePreferredChatId(chats: ChatSpec[], agentId: string, userId: string, channel: string): string | null {
-  const storedChatId = getStoredActiveChatId(agentId, userId, channel);
-  if (storedChatId && chats.some((chat) => chat.id === storedChatId)) {
-    return storedChatId;
-  }
-
-  return chats[0]?.id ?? null;
-}
-
-function extractPlainTextFromBlocks(contentBlocks: ChatMessageContentBlock[]): string {
-  return contentBlocks
-    .filter((contentBlock): contentBlock is ChatTextContentBlock => contentBlock.type === 'text')
-    .map((contentBlock) => contentBlock.text)
-    .join('\n\n');
-}
-
-function buildAudioDataUrl(data: string, format: string): string {
-  if (data.startsWith('data:')) {
-    return data;
-  }
-
-  const normalizedFormat = format.trim() || 'webm';
-  const mediaType = normalizedFormat.includes('/') ? normalizedFormat : `audio/${normalizedFormat}`;
-  return `data:${mediaType};base64,${data}`;
-}
-
-function buildGenericDataUrl(base64Data?: string): string {
-  if (!base64Data) {
-    return '';
-  }
-
-  if (base64Data.startsWith('data:')) {
-    return base64Data;
-  }
-
-  return `data:application/octet-stream;base64,${base64Data}`;
-}
-
-function extractBase64Payload(dataUrl: string): string {
-  const separatorIndex = dataUrl.indexOf(',');
-  if (separatorIndex === -1) {
-    return dataUrl;
-  }
-
-  return dataUrl.slice(separatorIndex + 1);
-}
-
-function guessAudioFormat(mimeType: string): string {
-  if (mimeType.includes('ogg')) {
-    return 'ogg';
-  }
-
-  if (mimeType.includes('mp4') || mimeType.includes('m4a')) {
-    return 'mp4';
-  }
-
-  if (mimeType.includes('wav')) {
-    return 'wav';
-  }
-
-  return 'webm';
-}
-
-function readBlobAsDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        resolve(reader.result);
-        return;
-      }
-
-      reject(new Error('Unable to read recorded audio.'));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error('Unable to read recorded audio.'));
-    reader.readAsDataURL(blob);
-  });
 }

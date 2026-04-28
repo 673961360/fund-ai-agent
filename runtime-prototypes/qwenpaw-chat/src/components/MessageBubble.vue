@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { renderMarkdown } from '@/utils/render-markdown';
-import type { ChatFileContentBlock, ChatMessage, ChatMessageContentBlock, ChatMessageSection } from '@proto-shared/types';
+import type {
+  ChatFileContentBlock,
+  ChatMessage,
+  ChatMessageContentBlock,
+  ChatMessageSection,
+} from '@proto-shared/types';
 
 interface Props {
   message: ChatMessage;
@@ -40,12 +45,18 @@ const timeLabel = computed(() =>
 
 const assistantSections = computed(() => props.message.sections ?? []);
 const answerSections = computed(() =>
-  assistantSections.value.filter((section) => section.kind === 'answer' && hasSectionContent(section)),
+  assistantSections.value.filter(
+    (section) => section.kind === 'answer' && hasSectionContent(section),
+  ),
 );
 const detailSections = computed(() =>
-  assistantSections.value.filter((section) => section.kind !== 'answer' && hasSectionContent(section)),
+  assistantSections.value.filter(
+    (section) => section.kind !== 'answer' && hasSectionContent(section),
+  ),
 );
-const assistantMediaBlocks = computed(() => props.message.contentBlocks.filter((block) => block.type !== 'text'));
+const assistantMediaBlocks = computed(() =>
+  props.message.contentBlocks.filter((block) => block.type !== 'text'),
+);
 const primaryContentBlocks = computed(() =>
   props.message.role === 'assistant'
     ? props.message.contentBlocks.filter((block) => block.type !== 'text')
@@ -60,7 +71,9 @@ const showAssistantFallback = computed(
 const hasStructuredAssistantContent = computed(
   () =>
     props.message.role === 'assistant' &&
-    (answerSections.value.length > 0 || detailSections.value.length > 0 || assistantMediaBlocks.value.length > 0),
+    (answerSections.value.length > 0 ||
+      detailSections.value.length > 0 ||
+      assistantMediaBlocks.value.length > 0),
 );
 
 function hasSectionContent(section: ChatMessageSection): boolean {
@@ -159,7 +172,9 @@ function asFileBlock(contentBlock: ChatMessageContentBlock): ChatFileContentBloc
           >
             <span class="message-bubble__file-icon">文件</span>
             <span class="message-bubble__file-body">
-              <strong class="message-bubble__file-name">{{ resolveFileLabel(asFileBlock(contentBlock)) }}</strong>
+              <strong class="message-bubble__file-name">{{
+                resolveFileLabel(asFileBlock(contentBlock))
+              }}</strong>
               <span class="message-bubble__file-meta">打开附件</span>
             </span>
           </a>
@@ -175,21 +190,28 @@ function asFileBlock(contentBlock: ChatMessageContentBlock): ChatFileContentBloc
       <details v-for="section in detailSections" :key="section.id" class="message-bubble__details">
         <summary class="message-bubble__summary">
           <span class="message-bubble__summary-title">{{ buildSectionSummary(section) }}</span>
-          <span v-if="section.status === 'streaming'" class="message-bubble__summary-meta">更新中</span>
+          <span v-if="section.status === 'streaming'" class="message-bubble__summary-meta"
+            >更新中</span
+          >
         </summary>
         <div class="message-bubble__details-body">
           <pre class="message-bubble__section-content">{{ section.content }}</pre>
         </div>
       </details>
 
-      <p v-if="!hasStructuredAssistantContent && !showAssistantFallback" class="message-bubble__content">
+      <p
+        v-if="!hasStructuredAssistantContent && !showAssistantFallback"
+        class="message-bubble__content"
+      >
         {{ message.content || ' ' }}
       </p>
     </div>
 
     <div v-else class="message-bubble__content-stack">
       <template v-for="contentBlock in primaryContentBlocks" :key="contentBlock.id">
-        <p v-if="contentBlock.type === 'text'" class="message-bubble__content">{{ contentBlock.text }}</p>
+        <p v-if="contentBlock.type === 'text'" class="message-bubble__content">
+          {{ contentBlock.text }}
+        </p>
         <img
           v-else-if="contentBlock.type === 'image'"
           class="message-bubble__image"
@@ -206,7 +228,9 @@ function asFileBlock(contentBlock: ChatMessageContentBlock): ChatFileContentBloc
         >
           <span class="message-bubble__file-icon">文件</span>
           <span class="message-bubble__file-body">
-            <strong class="message-bubble__file-name">{{ resolveFileLabel(asFileBlock(contentBlock)) }}</strong>
+            <strong class="message-bubble__file-name">{{
+              resolveFileLabel(asFileBlock(contentBlock))
+            }}</strong>
             <span class="message-bubble__file-meta">打开附件</span>
           </span>
         </a>
@@ -217,7 +241,9 @@ function asFileBlock(contentBlock: ChatMessageContentBlock): ChatFileContentBloc
           :src="contentBlock.dataUrl"
         />
       </template>
-      <p v-if="primaryContentBlocks.length === 0" class="message-bubble__content">{{ message.content || ' ' }}</p>
+      <p v-if="primaryContentBlocks.length === 0" class="message-bubble__content">
+        {{ message.content || ' ' }}
+      </p>
     </div>
 
     <span v-if="message.status === 'streaming'" class="message-bubble__streaming">生成中</span>

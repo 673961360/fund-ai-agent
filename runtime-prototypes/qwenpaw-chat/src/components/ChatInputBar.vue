@@ -52,7 +52,11 @@ const isPrimaryDisabled = computed(() => {
 });
 
 const isAttachmentDisabled = computed(
-  () => props.disabled || props.busy || props.recordingState.status === 'recording' || props.recordingState.status === 'processing',
+  () =>
+    props.disabled ||
+    props.busy ||
+    props.recordingState.status === 'recording' ||
+    props.recordingState.status === 'processing',
 );
 
 function resizeTextarea(element: HTMLTextAreaElement | null): void {
@@ -152,8 +156,8 @@ function extractFilesFromClipboard(data: DataTransfer | null): File[] {
   if (files.length > 0) return files;
   const items = Array.from(data.items ?? []);
   return items
-    .filter(item => item.kind === 'file')
-    .map(item => item.getAsFile())
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile())
     .filter((file): file is File => file !== null);
 }
 
@@ -195,20 +199,42 @@ watch(
 <template>
   <section class="chat-input-bar">
     <div v-if="pendingUploads.length > 0" class="chat-input-bar__uploads">
-      <article v-for="upload in pendingUploads" :key="upload.id" class="chat-input-bar__upload-card">
-        <div v-if="upload.kind === 'image' && upload.previewUrl" class="chat-input-bar__upload-preview">
+      <article
+        v-for="upload in pendingUploads"
+        :key="upload.id"
+        class="chat-input-bar__upload-card"
+      >
+        <div
+          v-if="upload.kind === 'image' && upload.previewUrl"
+          class="chat-input-bar__upload-preview"
+        >
           <img :src="upload.previewUrl" :alt="upload.name" />
         </div>
-        <div v-else class="chat-input-bar__upload-icon">{{ upload.kind === 'audio' ? '音频' : '文件' }}</div>
+        <div v-else class="chat-input-bar__upload-icon">
+          {{ upload.kind === 'audio' ? '音频' : '文件' }}
+        </div>
 
         <div class="chat-input-bar__upload-body">
           <strong class="chat-input-bar__upload-name">{{ upload.name }}</strong>
           <span class="chat-input-bar__upload-meta">
             {{ Math.max(1, Math.round(upload.size / 1024)) }} KB ·
-            {{ upload.status === 'uploading' ? '上传中' : upload.status === 'error' ? '上传失败' : '已就绪' }}
+            {{
+              upload.status === 'uploading'
+                ? '上传中'
+                : upload.status === 'error'
+                  ? '上传失败'
+                  : '已就绪'
+            }}
           </span>
-          <audio v-if="upload.kind === 'audio' && upload.previewUrl" class="chat-input-bar__audio-preview" controls :src="upload.previewUrl" />
-          <p v-if="upload.errorMessage" class="chat-input-bar__upload-error">{{ upload.errorMessage }}</p>
+          <audio
+            v-if="upload.kind === 'audio' && upload.previewUrl"
+            class="chat-input-bar__audio-preview"
+            controls
+            :src="upload.previewUrl"
+          />
+          <p v-if="upload.errorMessage" class="chat-input-bar__upload-error">
+            {{ upload.errorMessage }}
+          </p>
         </div>
 
         <div class="chat-input-bar__upload-actions">
@@ -238,11 +264,17 @@ watch(
       class="chat-input-bar__recording"
     >
       <span class="chat-input-bar__recording-label">
-        {{ recordingState.status === 'recording' ? '录音中，点击结束录音后发送' : '正在处理录音...' }}
+        {{
+          recordingState.status === 'recording' ? '录音中，点击结束录音后发送' : '正在处理录音...'
+        }}
       </span>
       <div v-if="recordingState.status === 'recording'" class="chat-input-bar__recording-actions">
-        <button class="chat-input-bar__chip" type="button" @click="emit('stop-recording')">结束录音</button>
-        <button class="chat-input-bar__chip" type="button" @click="emit('cancel-recording')">取消</button>
+        <button class="chat-input-bar__chip" type="button" @click="emit('stop-recording')">
+          结束录音
+        </button>
+        <button class="chat-input-bar__chip" type="button" @click="emit('cancel-recording')">
+          取消
+        </button>
       </div>
     </div>
 
@@ -250,8 +282,28 @@ watch(
     <div class="chat-input-bar__surface" @dragover="onDragOver" @drop="onDrop">
       <div class="chat-input-bar__tools">
         <input ref="fileInputRef" class="sr-only" type="file" multiple @change="onFilesSelected" />
-        <button class="chat-input-bar__icon-button" type="button" title="附件" :disabled="isAttachmentDisabled" @click="triggerFilePicker">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        <button
+          class="chat-input-bar__icon-button"
+          type="button"
+          title="附件"
+          :disabled="isAttachmentDisabled"
+          @click="triggerFilePicker"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"
+            />
+          </svg>
         </button>
         <button
           class="chat-input-bar__icon-button"
@@ -264,7 +316,21 @@ watch(
           :disabled="disabled || busy"
           @click="toggleRecording"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" x2="12" y1="19" y2="22" />
+          </svg>
           <span v-if="!canRecord" class="chat-input-bar__tooltip">当前浏览器不支持录音</span>
         </button>
       </div>
@@ -299,8 +365,31 @@ watch(
         :disabled="isPrimaryDisabled"
         @click="onPrimaryAction"
       >
-        <svg v-if="!busy" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
-        <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+        <svg
+          v-if="!busy"
+          xmlns="http://www.w3.org/2000/svg"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="m5 12 7-7 7 7" />
+          <path d="M12 19V5" />
+        </svg>
+        <svg
+          v-else
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+        >
+          <rect x="4" y="4" width="16" height="16" rx="2" />
+        </svg>
       </button>
     </div>
 

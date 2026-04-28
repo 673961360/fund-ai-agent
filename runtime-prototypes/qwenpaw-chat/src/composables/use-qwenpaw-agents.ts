@@ -1,5 +1,9 @@
 import { computed, ref } from 'vue';
-import { getStoredSelectedAgentId, listAgents, setStoredSelectedAgentId } from '@proto-shared/qwenpaw-client';
+import {
+  getStoredSelectedAgentId,
+  listAgents,
+  setStoredSelectedAgentId,
+} from '@proto-shared/qwenpaw-client';
 import type { QwenPawAgentSummary } from '@proto-shared/types';
 
 export function useQwenPawAgents() {
@@ -15,7 +19,10 @@ export function useQwenPawAgents() {
     try {
       const loadedAgents = await listAgents(token);
       agents.value = loadedAgents;
-      selectedAgentId.value = resolveSelectedAgentId(loadedAgents, selectedAgentId.value || getStoredSelectedAgentId());
+      selectedAgentId.value = resolveSelectedAgentId(
+        loadedAgents,
+        selectedAgentId.value || getStoredSelectedAgentId(),
+      );
 
       if (selectedAgentId.value) {
         setStoredSelectedAgentId(selectedAgentId.value);
