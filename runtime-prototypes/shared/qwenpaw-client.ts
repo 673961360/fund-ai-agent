@@ -1,4 +1,7 @@
+export const DEFAULT_CHAT_NAME = 'New Chat';
+
 import { consumeResponseStream } from './sse-handler';
+import { uuid } from './uuid';
 import type {
   ChatHistory,
   ChatSpec,
@@ -195,7 +198,7 @@ export function setStoredActiveChatId(
 }
 
 export function buildConversationSessionId(agentId: string, userId: string): string {
-  return `console:${agentId}:${userId}:${crypto.randomUUID()}`;
+  return `console:${agentId}:${userId}:${uuid()}`;
 }
 
 export async function fetchAuthStatus(signal?: AbortSignal): Promise<QwenPawAuthStatusResponse> {
@@ -580,8 +583,8 @@ function normalizeChatSpec(value: unknown): ChatSpec {
   const now = new Date().toISOString();
 
   return {
-    id: readString(record?.id) || crypto.randomUUID(),
-    name: readString(record?.name) || 'New Chat',
+    id: readString(record?.id) || uuid(),
+    name: readString(record?.name) || DEFAULT_CHAT_NAME,
     session_id: readString(record?.session_id),
     user_id: readString(record?.user_id),
     channel: readString(record?.channel) || 'console',
@@ -598,7 +601,7 @@ function normalizeHistoryMessage(value: unknown): QwenPawHistoryMessage {
 
   return {
     ...(record ?? {}),
-    id: readString(record?.id) || crypto.randomUUID(),
+    id: readString(record?.id) || uuid(),
     role: normalizeChatRole(record?.role),
     content: Array.isArray(record?.content) ? record.content : null,
   } as QwenPawHistoryMessage;
