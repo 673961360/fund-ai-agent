@@ -20,8 +20,8 @@ const props = withDefaults(defineProps<Props>(), {
   busy: false,
   canSubmit: false,
   canRecord: false,
-  placeholder: '输入消息...',
-  helperText: 'Enter 发送，Shift + Enter 换行',
+  placeholder: '输入消息，可粘贴截图...',
+  helperText: 'Enter 发送，Shift + Enter 换行 · 支持粘贴/拖拽图片',
 });
 
 const emit = defineEmits<{
@@ -121,6 +121,39 @@ function toggleRecording(): void {
   emit('start-recording');
 }
 
+function extractFilesFromClipboard(data: DataTransfer | null): File[] {
+  if (!data) return [];
+  const files = Array.from(data.files ?? []);
+  if (files.length > 0) return files;
+  const items = Array.from(data.items ?? []);
+  return items
+    .filter(item => item.kind === 'file')
+    .map(item => item.getAsFile())
+    .filter((file): file is File => file !== null);
+}
+
+function onPaste(event: ClipboardEvent): void {
+  const files = extractFilesFromClipboard(event.clipboardData);
+  if (files.length > 0) {
+    event.preventDefault();
+    emit('add-files', files);
+  }
+}
+
+function onDragOver(event: DragEvent): void {
+  if (!event.dataTransfer?.types.includes('Files')) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'copy';
+}
+
+function onDrop(event: DragEvent): void {
+  event.preventDefault();
+  const files = Array.from(event.dataTransfer?.files ?? []);
+  if (files.length > 0) {
+    emit('add-files', files);
+  }
+}
+
 onMounted(() => {
   resizeTextarea(textareaRef.value);
 });
@@ -195,7 +228,7 @@ watch(
     </div>
 
     <label class="sr-only" for="chat-prompt">输入消息</label>
-    <div class="chat-input-bar__surface">
+    <div class="chat-input-bar__surface" @dragover="onDragOver" @drop="onDrop">
       <div class="chat-input-bar__tools">
         <input ref="fileInputRef" class="sr-only" type="file" multiple @change="onFilesSelected" />
         <button class="chat-input-bar__icon-button" type="button" :disabled="isAttachmentDisabled" @click="triggerFilePicker">
@@ -221,6 +254,7 @@ watch(
         rows="1"
         @input="onInput"
         @keydown="onKeydown"
+        @paste="onPaste"
       />
 
       <button class="primary-button chat-input-bar__submit" type="button" :disabled="isPrimaryDisabled" @click="onPrimaryAction">

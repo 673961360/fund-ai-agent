@@ -522,6 +522,7 @@ export function useQwenPawChatSession() {
     }
 
     const userMessage = createMessageFromRequestMessage(requestMessage, 'ready');
+    applyPreviewUrls(userMessage, composerSnapshot.uploads);
     const assistantMessage = createAssistantMessage('streaming');
 
     state.value.messages.push(userMessage, assistantMessage);
@@ -1458,6 +1459,21 @@ function createHistoryPrimaryMessage(message: QwenPawHistoryMessage, role: 'user
     createdAt: new Date().toISOString(),
     status: normalizeMessageStatus(message.status),
   };
+}
+
+function applyPreviewUrls(message: ChatMessage, uploads: PendingUpload[]): void {
+  const previewMap = new Map<string, string>();
+  for (const upload of uploads) {
+    if (upload.kind === 'image' && upload.previewUrl && upload.remoteUrl) {
+      previewMap.set(upload.remoteUrl, upload.previewUrl);
+    }
+  }
+  if (previewMap.size === 0) return;
+  for (const block of message.contentBlocks) {
+    if (block.type === 'image' && block.imageUrl && previewMap.has(block.imageUrl)) {
+      block.imageUrl = previewMap.get(block.imageUrl)!;
+    }
+  }
 }
 
 function createMessageFromRequestMessage(

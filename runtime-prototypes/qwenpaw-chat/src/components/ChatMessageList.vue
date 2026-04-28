@@ -21,11 +21,19 @@ const isPinnedToBottom = ref(true);
 
 const showScrollToBottom = computed(() => !isPinnedToBottom.value && props.messages.length > 0);
 
+let previousMessageCount = 0;
+
 watch(
   () => props.messages.map((message) => serializeMessage(message)).join('|'),
   async () => {
     await nextTick();
-    if (containerRef.value && isPinnedToBottom.value) {
+    if (!containerRef.value) return;
+
+    const newCount = props.messages.length;
+    const hasNewMessage = newCount > previousMessageCount;
+    previousMessageCount = newCount;
+
+    if (hasNewMessage || isPinnedToBottom.value) {
       scrollToBottom();
     }
   },
@@ -78,7 +86,7 @@ function scrollToBottom(): void {
 </script>
 
 <template>
-  <section class="chat-message-list" aria-label="聊天消息流">
+  <section ref="containerRef" class="chat-message-list" aria-label="聊天消息流" @scroll="onScroll">
     <div v-if="loading" class="chat-message-list__loading">
       <span class="chat-message-list__loading-line" />
       <span class="chat-message-list__loading-line chat-message-list__loading-line--wide" />
@@ -90,7 +98,7 @@ function scrollToBottom(): void {
       <span>{{ emptyDescription }}</span>
     </div>
 
-    <div v-else ref="containerRef" class="chat-message-list__items" @scroll="onScroll">
+    <div v-else class="chat-message-list__items">
       <MessageBubble v-for="message in messages" :key="message.id" :message="message" />
     </div>
 
