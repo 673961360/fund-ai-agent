@@ -630,6 +630,33 @@ button {
   color: var(--accent);
 }
 
+.chat-input-bar__icon-button {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.chat-input-bar__icon-button:hover:not(:disabled) {
+  background: rgba(22, 37, 53, 0.15);
+}
+
+.chat-input-bar__icon-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chat-input-bar__icon-button--recording {
+  background: rgba(220, 53, 69, 0.15);
+  color: #dc3545;
+}
+
 .chat-input-bar__audio-preview {
   width: min(100%, 280px);
 }
@@ -646,9 +673,9 @@ button {
 
 .chat-input-bar__tools {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  justify-content: flex-end;
+  flex-direction: row;
+  gap: 6px;
+  align-items: flex-end;
 }
 
 .chat-input-bar__field {

@@ -1,5 +1,6 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
 import {
+  DEFAULT_CHAT_NAME,
   buildConversationSessionId,
   createChat,
   deleteChat,
@@ -253,14 +254,18 @@ export function useQwenPawChatSession() {
     }
 
     if (state.value.isSending && state.value.activeChatId !== chatId) {
-      return;
+      // 只断开前端 SSE 连接，不通知后端停止，以便切回时可重连接续生成
+      stopRequested.value = true;
+      clearLocalCompletionTimer();
+      activeController.value?.abort();
     }
 
     if (!options.force && state.value.activeChatId === chatId && state.value.messages.length > 0) {
       return;
     }
 
-    await loadChatById(options.agentId, chatId, options.token ?? null, true);
+    // sidebar 点击只加载历史，不触发 reconnect（避免空流挂起导致 isLoadingHistory 卡住）
+    await loadChatById(options.agentId, chatId, options.token ?? null, false);
   }
 
   function createNewConversation(): void {
@@ -521,6 +526,9 @@ export function useQwenPawChatSession() {
       return;
     }
 
+    const isFirstMessage = state.value.messages.length === 0;
+    const userText = composerSnapshot.draft.trim();
+
     const userMessage = createMessageFromRequestMessage(requestMessage, 'ready');
     applyPreviewUrls(userMessage, composerSnapshot.uploads);
     const assistantMessage = createAssistantMessage('streaming');
@@ -574,6 +582,13 @@ export function useQwenPawChatSession() {
         status: 'idle',
         updated_at: new Date().toISOString(),
       });
+
+      if (isFirstMessage && userText && chatSpec.name === DEFAULT_CHAT_NAME) {
+        const autoTitle = generateChatTitleFromText(userText);
+        updateChat(options.agentId, chatSpec.id, { name: autoTitle }, options.token)
+          .then(updated => upsertChatSpec(updated))
+          .catch(() => {});
+      }
 
       if (streamOutcome.resetSessionAfterCompletion) {
         prepareBlankConversation(true);
@@ -2146,6 +2161,17 @@ function sortChats(chats: ChatSpec[]): ChatSpec[] {
 
     return new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime();
   });
+}
+
+function generateChatTitleFromText(text: string): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return '新聊天';
+  const MAX = 30;
+  if (normalized.length <= MAX) return normalized;
+  const truncated = normalized.slice(0, MAX);
+  const lastSpace = truncated.lastIndexOf(' ');
+  if (lastSpace > MAX * 0.5) return truncated.slice(0, lastSpace) + '...';
+  return truncated + '...';
 }
 
 function resolvePreferredChatId(chats: ChatSpec[], agentId: string, userId: string, channel: string): string | null {

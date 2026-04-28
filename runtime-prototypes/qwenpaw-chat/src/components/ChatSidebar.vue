@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import type { RuntimeConfigFormState } from '@/types/chat-ui';
+import { DEFAULT_CHAT_NAME } from '@proto-shared/qwenpaw-client';
 import type { ChatSpec, QwenPawAgentSummary, QwenPawConnectionMode } from '@proto-shared/types';
 
 interface Props {
@@ -122,7 +123,7 @@ function formatChatTime(value: string): string {
 
 function normalizeChatName(value: string | null | undefined): string {
   const normalizedValue = value?.trim();
-  return normalizedValue || 'New Chat';
+  return normalizedValue || DEFAULT_CHAT_NAME;
 }
 
 function startRename(chat: ChatSpec): void {
