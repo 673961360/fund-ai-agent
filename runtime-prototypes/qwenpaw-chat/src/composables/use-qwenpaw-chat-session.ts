@@ -126,6 +126,8 @@ export function useQwenPawChatSession() {
   const localCompletionRequested = ref(false);
   const uploadControllers = new Map<string, AbortController>();
   const cancelledUploadIds = new Set<string>();
+  // 切换离开流式聊天时缓存消息（后端可能尚未持久化）
+  const messageCache = new Map<string, ChatMessage[]>();
 
   const hasMessages = computed(() => state.value.messages.length > 0);
   const hasPendingUploads = computed(() => state.value.pendingUploads.length > 0);
@@ -254,7 +256,11 @@ export function useQwenPawChatSession() {
     }
 
     if (state.value.isSending && state.value.activeChatId !== chatId) {
-      // 只断开前端 SSE 连接，不通知后端停止，以便切回时可重连接续生成
+      // 缓存当前流式聊天的消息（后端在流完成前不会持久化，切回时需要恢复）
+      const currentChatId = state.value.activeChatId;
+      if (currentChatId) {
+        messageCache.set(currentChatId, JSON.parse(JSON.stringify(state.value.messages)));
+      }
       stopRequested.value = true;
       clearLocalCompletionTimer();
       activeController.value?.abort();
@@ -771,7 +777,14 @@ export function useQwenPawChatSession() {
         return;
       }
 
-      state.value.messages = normalizeHistoryMessages(history);
+      const cached = messageCache.get(chatId);
+      if (cached && history.messages.length === 0) {
+        // 后端尚未持久化消息（流式未完成），使用缓存的本地消息
+        state.value.messages = finalizeCachedMessages(cached);
+      } else {
+        state.value.messages = normalizeHistoryMessages(history);
+      }
+      if (cached) messageCache.delete(chatId);
       state.value.activeChatStatus = history.status === 'running' ? 'running' : 'idle';
       patchChatSpec(chatId, { status: history.status });
 
@@ -1000,6 +1013,7 @@ export function useQwenPawChatSession() {
     state.value.activeSessionId = null;
     state.value.activeChatStatus = 'idle';
     state.value.isSending = false;
+    messageCache.clear();
   }
 
   function ensureActiveSession(agentId: string, userId: string): void {
@@ -1393,6 +1407,22 @@ function isAssistantTurnHistoryMessage(message: QwenPawHistoryMessage): boolean 
 
   const messageType = normalizeMessageType(message.type);
   return role === 'system' && Boolean(messageType && TOOL_RESULT_MESSAGE_TYPES.has(messageType));
+}
+
+function finalizeCachedMessages(messages: ChatMessage[]): ChatMessage[] {
+  for (const msg of messages) {
+    if (msg.role === 'assistant' && msg.status === 'streaming') {
+      msg.status = 'ready';
+      if (msg.sections) {
+        for (const section of msg.sections) {
+          if (section.status === 'streaming') {
+            section.status = 'ready';
+          }
+        }
+      }
+    }
+  }
+  return messages;
 }
 
 function normalizeHistoryMessages(history: ChatHistory): ChatMessage[] {
