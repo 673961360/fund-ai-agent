@@ -15,6 +15,7 @@ interface Props {
 }
 
 const MAX_TEXTAREA_HEIGHT = 144;
+const MAX_INPUT_LENGTH = 10000;
 
 const props = withDefaults(defineProps<Props>(), {
   busy: false,
@@ -38,6 +39,9 @@ const emit = defineEmits<{
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
+const isComposing = ref(false);
+
+const charCount = computed(() => props.modelValue.length);
 
 const isPrimaryDisabled = computed(() => {
   if (props.busy) {
@@ -62,10 +66,30 @@ function resizeTextarea(element: HTMLTextAreaElement | null): void {
   element.style.overflowY = element.scrollHeight > MAX_TEXTAREA_HEIGHT ? 'auto' : 'hidden';
 }
 
+function clampInput(value: string): string {
+  return value.length > MAX_INPUT_LENGTH ? value.slice(0, MAX_INPUT_LENGTH) : value;
+}
+
 function onInput(event: Event): void {
+  if (isComposing.value) return;
   const target = event.target as HTMLTextAreaElement;
+  const clamped = clampInput(target.value);
+  if (clamped !== target.value) {
+    target.value = clamped;
+  }
   resizeTextarea(target);
-  emit('update:modelValue', target.value);
+  emit('update:modelValue', clamped);
+}
+
+function onCompositionEnd(event: CompositionEvent): void {
+  isComposing.value = false;
+  const target = event.target as HTMLTextAreaElement;
+  const clamped = clampInput(target.value);
+  if (clamped !== target.value) {
+    target.value = clamped;
+  }
+  resizeTextarea(target);
+  emit('update:modelValue', clamped);
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -109,6 +133,7 @@ function onFilesSelected(event: Event): void {
 }
 
 function toggleRecording(): void {
+  if (!props.canRecord) return;
   if (props.recordingState.status === 'recording') {
     emit('stop-recording');
     return;
@@ -209,17 +234,11 @@ watch(
     </div>
 
     <div
-      v-if="recordingState.status === 'recording' || recordingState.status === 'processing' || recordingState.errorMessage"
+      v-if="recordingState.status === 'recording' || recordingState.status === 'processing'"
       class="chat-input-bar__recording"
     >
       <span class="chat-input-bar__recording-label">
-        {{
-          recordingState.status === 'recording'
-            ? '录音中，点击结束录音后发送'
-            : recordingState.status === 'processing'
-              ? '正在处理录音...'
-              : recordingState.errorMessage
-        }}
+        {{ recordingState.status === 'recording' ? '录音中，点击结束录音后发送' : '正在处理录音...' }}
       </span>
       <div v-if="recordingState.status === 'recording'" class="chat-input-bar__recording-actions">
         <button class="chat-input-bar__chip" type="button" @click="emit('stop-recording')">结束录音</button>
@@ -236,13 +255,17 @@ watch(
         </button>
         <button
           class="chat-input-bar__icon-button"
-          :class="{ 'chat-input-bar__icon-button--recording': recordingState.status === 'recording' }"
+          :class="{
+            'chat-input-bar__icon-button--recording': recordingState.status === 'recording',
+            'chat-input-bar__icon-button--unsupported': !canRecord,
+          }"
           type="button"
           :title="recordingState.status === 'recording' ? '结束录音' : '语音'"
-          :disabled="disabled || busy || !canRecord"
+          :disabled="disabled || busy"
           @click="toggleRecording"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+          <span v-if="!canRecord" class="chat-input-bar__tooltip">当前浏览器不支持录音</span>
         </button>
       </div>
 
@@ -253,14 +276,31 @@ watch(
         :disabled="disabled || busy"
         :value="modelValue"
         :placeholder="placeholder"
+        :maxlength="MAX_INPUT_LENGTH"
         rows="1"
         @input="onInput"
         @keydown="onKeydown"
         @paste="onPaste"
+        @compositionstart="isComposing = true"
+        @compositionend="onCompositionEnd"
       />
 
-      <button class="primary-button chat-input-bar__submit" type="button" :disabled="isPrimaryDisabled" @click="onPrimaryAction">
-        {{ busy ? '停止' : '发送' }}
+      <span
+        class="chat-input-bar__char-count"
+        :class="{ 'chat-input-bar__char-count--warn': charCount > MAX_INPUT_LENGTH * 0.9 }"
+      >
+        {{ Math.min(charCount, MAX_INPUT_LENGTH) }}/{{ MAX_INPUT_LENGTH }}
+      </span>
+
+      <button
+        class="chat-input-bar__icon-button chat-input-bar__send-btn"
+        type="button"
+        :title="busy ? '停止' : '发送'"
+        :disabled="isPrimaryDisabled"
+        @click="onPrimaryAction"
+      >
+        <svg v-if="!busy" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
+        <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
       </button>
     </div>
 

@@ -166,6 +166,21 @@ export function useQwenPawChatSession() {
     localCompletionController.value = null;
   }
 
+  function waitForSendingClear(timeoutMs = 3000): Promise<void> {
+    if (!state.value.isSending) return Promise.resolve();
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const check = () => {
+        if (!state.value.isSending || Date.now() - start > timeoutMs) {
+          resolve();
+        } else {
+          setTimeout(check, 20);
+        }
+      };
+      setTimeout(check, 20);
+    });
+  }
+
   function requestLocalCompletion(): void {
     if (localCompletionRequested.value) {
       return;
@@ -270,8 +285,7 @@ export function useQwenPawChatSession() {
       return;
     }
 
-    // sidebar 点击只加载历史，不触发 reconnect（避免空流挂起导致 isLoadingHistory 卡住）
-    await loadChatById(options.agentId, chatId, options.token ?? null, false);
+    await loadChatById(options.agentId, chatId, options.token ?? null, true);
   }
 
   function createNewConversation(): void {
@@ -551,6 +565,14 @@ export function useQwenPawChatSession() {
       updated_at: new Date().toISOString(),
     });
 
+    // 首条消息立即生成标题（不等待流完成，避免切换会话时标题丢失）
+    if (isFirstMessage && userText && chatSpec.name === DEFAULT_CHAT_NAME) {
+      const autoTitle = generateChatTitleFromText(userText);
+      updateChat(options.agentId, chatSpec.id, { name: autoTitle }, options.token)
+        .then(updated => upsertChatSpec(updated))
+        .catch(() => {});
+    }
+
     resetLocalCompletionState();
     const controller = new AbortController();
     const completionController = new AbortController();
@@ -588,13 +610,6 @@ export function useQwenPawChatSession() {
         status: 'idle',
         updated_at: new Date().toISOString(),
       });
-
-      if (isFirstMessage && userText && chatSpec.name === DEFAULT_CHAT_NAME) {
-        const autoTitle = generateChatTitleFromText(userText);
-        updateChat(options.agentId, chatSpec.id, { name: autoTitle }, options.token)
-          .then(updated => upsertChatSpec(updated))
-          .catch(() => {});
-      }
 
       if (streamOutcome.resetSessionAfterCompletion) {
         prepareBlankConversation(true);
@@ -778,18 +793,36 @@ export function useQwenPawChatSession() {
       }
 
       const cached = messageCache.get(chatId);
-      if (cached && history.messages.length === 0) {
-        // 后端尚未持久化消息（流式未完成），使用缓存的本地消息
-        state.value.messages = finalizeCachedMessages(cached);
-      } else {
-        state.value.messages = normalizeHistoryMessages(history);
-      }
-      if (cached) messageCache.delete(chatId);
-      state.value.activeChatStatus = history.status === 'running' ? 'running' : 'idle';
-      patchChatSpec(chatId, { status: history.status });
 
       if (history.status === 'running' && reconnectIfRunning) {
-        await reconnectActiveChat(agentId, chatSpec, token ?? undefined);
+        // 即将 reconnect：使用后端历史消息作为基础（不含未持久化的助手消息），
+        // reconnect 通过事件回放从零构建助手消息，避免与缓存内容重复叠加
+        state.value.messages = normalizeHistoryMessages(history);
+        if (history.messages.length === 0 && cached) {
+          // 后端尚未持久化用户消息，用缓存中的用户消息补上
+          state.value.messages = cached.filter(m => m.role === 'user');
+        }
+        if (cached) messageCache.delete(chatId);
+        state.value.activeChatStatus = 'running';
+        patchChatSpec(chatId, { status: 'running' });
+        isLoadingHistory.value = false;
+
+        // 等待前一个流的 abort 处理完成（避免 isSending 竞态导致 reconnectActiveChat 直接返回）
+        if (state.value.isSending) {
+          await waitForSendingClear();
+        }
+        if (state.value.activeChatId === chatId) {
+          await reconnectActiveChat(agentId, chatSpec, token ?? undefined);
+        }
+      } else {
+        if (cached && history.messages.length === 0) {
+          state.value.messages = finalizeCachedMessages(cached);
+        } else {
+          state.value.messages = normalizeHistoryMessages(history);
+        }
+        if (cached) messageCache.delete(chatId);
+        state.value.activeChatStatus = history.status === 'running' ? 'running' : 'idle';
+        patchChatSpec(chatId, { status: history.status });
       }
     } catch (error) {
       state.value.errorMessage = toErrorMessage(error);
@@ -841,6 +874,14 @@ export function useQwenPawChatSession() {
           scheduleLocalCompletion(assistantMessage, streamOutcome);
         },
       });
+
+      // 没收到任何事件 → 后端 task 在 reconnect 前已结束，重新加载完整历史
+      if (!streamOutcome.hasRenderableContent) {
+        const freshHistory = await getChatHistory(agentId, chatSpec.id, token ?? undefined);
+        if (freshHistory.messages.length > 0) {
+          state.value.messages = normalizeHistoryMessages(freshHistory);
+        }
+      }
 
       finalizeCompletedStream(assistantMessage, streamOutcome, state.value);
       state.value.activeChatStatus = 'idle';
