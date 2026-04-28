@@ -123,7 +123,6 @@ export function useQwenPawChatSession() {
   const recordingMimeType = ref('');
   const localCompletionController = ref<AbortController | null>(null);
   const localCompletionTimer = ref<ReturnType<typeof setTimeout> | null>(null);
-  const localCompletionRequested = ref(false);
   const uploadControllers = new Map<string, AbortController>();
   const cancelledUploadIds = new Set<string>();
   // 切换离开流式聊天时缓存消息（后端可能尚未持久化）
@@ -162,7 +161,6 @@ export function useQwenPawChatSession() {
 
   function resetLocalCompletionState(): void {
     clearLocalCompletionTimer();
-    localCompletionRequested.value = false;
     localCompletionController.value = null;
   }
 
@@ -179,42 +177,6 @@ export function useQwenPawChatSession() {
       };
       setTimeout(check, 20);
     });
-  }
-
-  function requestLocalCompletion(): void {
-    if (localCompletionRequested.value) {
-      return;
-    }
-
-    localCompletionRequested.value = true;
-    clearLocalCompletionTimer();
-    localCompletionController.value?.abort();
-  }
-
-  function scheduleLocalCompletion(assistantMessage: ChatMessage, streamOutcome: StreamOutcome): void {
-    clearLocalCompletionTimer();
-
-    if (
-      streamOutcome.terminalStatus ||
-      assistantMessage.status === 'error' ||
-      !hasRenderableAnswerContent(assistantMessage)
-    ) {
-      return;
-    }
-
-    localCompletionTimer.value = setTimeout(() => {
-      const trackedAssistantMessage = getTrackedAssistantMessage(state.value.messages, assistantMessage.id) ?? assistantMessage;
-      if (
-        !state.value.isSending ||
-        streamOutcome.terminalStatus ||
-        trackedAssistantMessage.status === 'error' ||
-        !hasRenderableAnswerContent(trackedAssistantMessage)
-      ) {
-        return;
-      }
-
-      requestLocalCompletion();
-    }, 1000);
   }
 
   function cancelTrackedUpload(uploadId: string): void {
@@ -600,7 +562,6 @@ export function useQwenPawChatSession() {
         earlyExitSignal: completionController.signal,
         onEvent: (event) => {
           applyStreamEvent(event, trackedAssistantMessage, streamOutcome, messageTypeMap, state.value);
-          scheduleLocalCompletion(trackedAssistantMessage, streamOutcome);
         },
       });
 
@@ -871,7 +832,6 @@ export function useQwenPawChatSession() {
         earlyExitSignal: completionController.signal,
         onEvent: (event) => {
           applyStreamEvent(event, assistantMessage, streamOutcome, messageTypeMap, state.value);
-          scheduleLocalCompletion(assistantMessage, streamOutcome);
         },
       });
 
