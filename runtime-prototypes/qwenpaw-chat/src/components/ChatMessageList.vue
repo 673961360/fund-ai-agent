@@ -83,6 +83,13 @@ function scrollToBottom(): void {
   isPinnedToBottom.value = true;
   showScrollBtn.value = false;
 }
+
+/** 标记下次消息更新时强制滚到底部 */
+function requestScrollToBottom(): void {
+  isPinnedToBottom.value = true;
+}
+
+defineExpose({ requestScrollToBottom });
 </script>
 
 <template>

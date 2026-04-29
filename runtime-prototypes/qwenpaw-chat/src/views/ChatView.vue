@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, reactive } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import ChatHeader from '@/components/ChatHeader.vue';
 import ChatInputBar from '@/components/ChatInputBar.vue';
 import ChatMessageList from '@/components/ChatMessageList.vue';
@@ -61,6 +61,8 @@ const {
   stopStreaming,
   cancelRecording,
 } = useQwenPawChatSession();
+
+const messageListRef = ref<InstanceType<typeof ChatMessageList> | null>(null);
 
 const loginForm = reactive({
   username: '',
@@ -226,6 +228,7 @@ function updateLoginField(field: 'username' | 'password', value: string): void {
 }
 
 async function handleSendDraft(): Promise<void> {
+  messageListRef.value?.requestScrollToBottom();
   await sendDraft({
     agentId: selectedAgentId.value,
     token: token.value,
@@ -324,6 +327,7 @@ function handleStartRecording(): void {
         />
 
         <ChatMessageList
+          ref="messageListRef"
           :messages="messages"
           :loading="isLoadingHistory"
           :empty-description="emptyStateDescription"
