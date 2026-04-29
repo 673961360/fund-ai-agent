@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import type { PendingUpload, RecordingState } from '@proto-shared/types';
+import type { PendingUpload, RecordingState, SpeechRecognitionState } from '@proto-shared/types';
 
 interface Props {
   modelValue: string;
@@ -8,8 +8,10 @@ interface Props {
   busy?: boolean;
   canSubmit?: boolean;
   canRecord?: boolean;
+  canSpeech?: boolean;
   pendingUploads: PendingUpload[];
   recordingState: RecordingState;
+  speechState: SpeechRecognitionState;
   placeholder?: string;
   helperText?: string;
 }
@@ -21,6 +23,7 @@ const props = withDefaults(defineProps<Props>(), {
   busy: false,
   canSubmit: false,
   canRecord: false,
+  canSpeech: false,
   placeholder: '输入消息，可粘贴截图...',
   helperText: 'Enter 发送，Shift + Enter 换行 · 支持粘贴/拖拽图片',
 });
@@ -35,6 +38,8 @@ const emit = defineEmits<{
   'start-recording': [];
   'stop-recording': [];
   'cancel-recording': [];
+  'start-speech': [];
+  'stop-speech': [];
 }>();
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
@@ -56,8 +61,12 @@ const isAttachmentDisabled = computed(
     props.disabled ||
     props.busy ||
     props.recordingState.status === 'recording' ||
-    props.recordingState.status === 'processing',
+    props.recordingState.status === 'processing' ||
+    props.speechState.status === 'listening',
 );
+
+// 是否有任何语音能力可用
+const hasAnyVoiceCapability = computed(() => props.canSpeech || props.canRecord);
 
 function resizeTextarea(element: HTMLTextAreaElement | null): void {
   if (!element) {
@@ -136,19 +145,42 @@ function onFilesSelected(event: Event): void {
   target.value = '';
 }
 
-function toggleRecording(): void {
-  if (!props.canRecord) return;
-  if (props.recordingState.status === 'recording') {
-    emit('stop-recording');
+function toggleVoiceInput(): void {
+  // 优先使用 Web Speech API
+  if (props.canSpeech) {
+    if (props.speechState.status === 'listening') {
+      emit('stop-speech');
+    } else {
+      emit('start-speech');
+    }
     return;
   }
 
-  if (props.recordingState.status === 'processing') {
-    return;
-  }
+  // 降级到 MediaRecorder 录音（仅实验功能开启时 canRecord 才为 true）
+  if (props.canRecord) {
+    if (props.recordingState.status === 'recording') {
+      emit('stop-recording');
+      return;
+    }
 
-  emit('start-recording');
+    if (props.recordingState.status === 'processing') {
+      return;
+    }
+
+    emit('start-recording');
+  }
 }
+
+// 麦克风按钮的 tooltip 文本
+const micButtonTitle = computed(() => {
+  if (props.canSpeech) {
+    return props.speechState.status === 'listening' ? '停止语音识别' : '语音输入';
+  }
+  if (props.canRecord) {
+    return props.recordingState.status === 'recording' ? '结束录音' : '语音';
+  }
+  return '语音';
+});
 
 function extractFilesFromClipboard(data: DataTransfer | null): File[] {
   if (!data) return [];
@@ -259,8 +291,24 @@ watch(
       </article>
     </div>
 
+    <!-- 语音识别状态条（默认模式） -->
     <div
-      v-if="recordingState.status === 'recording' || recordingState.status === 'processing'"
+      v-if="speechState.status === 'listening'"
+      class="chat-input-bar__recording"
+    >
+      <span class="chat-input-bar__recording-label">
+        语音识别中{{ speechState.interimTranscript ? '：' + speechState.interimTranscript : '...' }}
+      </span>
+      <div class="chat-input-bar__recording-actions">
+        <button class="chat-input-bar__chip" type="button" @click="emit('stop-speech')">
+          停止
+        </button>
+      </div>
+    </div>
+
+    <!-- 录音状态条（实验模式，仅 canRecord 且不在语音识别中时显示） -->
+    <div
+      v-if="canRecord && !canSpeech && (recordingState.status === 'recording' || recordingState.status === 'processing')"
       class="chat-input-bar__recording"
     >
       <span class="chat-input-bar__recording-label">
@@ -308,13 +356,14 @@ watch(
         <button
           class="chat-input-bar__icon-button"
           :class="{
-            'chat-input-bar__icon-button--recording': recordingState.status === 'recording',
-            'chat-input-bar__icon-button--unsupported': !canRecord,
+            'chat-input-bar__icon-button--speech': speechState.status === 'listening',
+            'chat-input-bar__icon-button--recording': !canSpeech && recordingState.status === 'recording',
+            'chat-input-bar__icon-button--unsupported': !hasAnyVoiceCapability,
           }"
           type="button"
-          :title="recordingState.status === 'recording' ? '结束录音' : '语音'"
+          :title="micButtonTitle"
           :disabled="disabled || busy"
-          @click="toggleRecording"
+          @click="toggleVoiceInput"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -331,7 +380,7 @@ watch(
             <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
             <line x1="12" x2="12" y1="19" y2="22" />
           </svg>
-          <span v-if="!canRecord" class="chat-input-bar__tooltip">当前浏览器不支持录音</span>
+          <span v-if="!hasAnyVoiceCapability" class="chat-input-bar__tooltip">当前浏览器不支持语音</span>
         </button>
       </div>
 

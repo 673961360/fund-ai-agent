@@ -806,6 +806,11 @@ button {
   color: #dc3545;
 }
 
+.chat-input-bar__icon-button--speech {
+  background: rgba(13, 110, 253, 0.15);
+  color: #0d6efd;
+}
+
 .chat-input-bar__icon-button--unsupported {
   opacity: 0.4;
   position: relative;

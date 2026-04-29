@@ -12,6 +12,14 @@ export type PendingUploadStatus = 'uploading' | 'ready' | 'error';
 
 export type RecordingStatus = 'idle' | 'recording' | 'processing' | 'unsupported' | 'error';
 
+export type SpeechRecognitionStatus = 'idle' | 'listening' | 'unsupported' | 'error';
+
+export interface SpeechRecognitionState {
+  status: SpeechRecognitionStatus;
+  errorMessage: string;
+  interimTranscript: string;
+}
+
 export interface ChatMessageSectionMeta {
   callId?: string;
   toolName?: string;

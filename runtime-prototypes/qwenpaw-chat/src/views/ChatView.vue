@@ -35,6 +35,8 @@ const {
   activeChatStatus,
   addPendingFiles,
   canRecord,
+  canSpeech,
+  speechState,
   canSubmit,
   chatList,
   createNewConversation,
@@ -60,6 +62,8 @@ const {
   stopRecordingCapture,
   stopStreaming,
   cancelRecording,
+  startSpeechRecognition,
+  stopSpeechRecognition,
 } = useQwenPawChatSession();
 
 const messageListRef = ref<InstanceType<typeof ChatMessageList> | null>(null);
@@ -101,7 +105,8 @@ const isComposerDisabled = computed(
     isSubmitting.value ||
     isLoadingChats.value ||
     isLoadingHistory.value ||
-    recordingState.value.status === 'processing',
+    recordingState.value.status === 'processing' ||
+    speechState.value.status === 'listening',
 );
 const isConfigBusy = computed(
   () =>
@@ -193,6 +198,10 @@ const inputPlaceholder = computed(() => {
     return '录音中...';
   }
 
+  if (speechState.value.status === 'listening') {
+    return '语音识别中...';
+  }
+
   return `给 ${selectedAgent.value?.name || 'QwenPaw'} 发送消息`;
 });
 const inputHelperText = computed(() => {
@@ -205,11 +214,15 @@ const inputHelperText = computed(() => {
   }
 
   if (recordingState.value.status === 'recording') {
-    return '点击“结束录音”后会把音频加入待发送区。';
+    return '点击”结束录音”后会把音频加入待发送区。';
   }
 
   if (recordingState.value.status === 'processing') {
     return '正在处理录音，请稍候。';
+  }
+
+  if (speechState.value.status === 'listening') {
+    return '识别结果将自动填入输入框。';
   }
 
   if (isSending.value) {
@@ -312,6 +325,14 @@ function handleRetryUpload(uploadId: string): void {
 function handleStartRecording(): void {
   void startRecording();
 }
+
+function handleStartSpeech(): void {
+  startSpeechRecognition();
+}
+
+function handleStopSpeech(): void {
+  stopSpeechRecognition();
+}
 </script>
 
 <template>
@@ -339,8 +360,10 @@ function handleStartRecording(): void {
           :disabled="isComposerDisabled"
           :can-submit="canSubmit"
           :can-record="canRecord"
+          :can-speech="canSpeech"
           :pending-uploads="pendingUploads"
           :recording-state="recordingState"
+          :speech-state="speechState"
           :placeholder="inputPlaceholder"
           :helper-text="inputHelperText"
           @submit="handleSendDraft"
@@ -351,6 +374,8 @@ function handleStartRecording(): void {
           @start-recording="handleStartRecording"
           @stop-recording="stopRecordingCapture"
           @cancel-recording="cancelRecording"
+          @start-speech="handleStartSpeech"
+          @stop-speech="handleStopSpeech"
         />
       </section>
 

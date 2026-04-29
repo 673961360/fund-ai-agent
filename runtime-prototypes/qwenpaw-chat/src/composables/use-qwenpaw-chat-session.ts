@@ -68,7 +68,20 @@ import {
   resolvePreferredChatId,
   sortChats,
 } from '@/composables/chat-session/workspace';
-import type { ChatMessage, ChatSpec, ChatState, PendingUpload } from '@proto-shared/types';
+import type {
+  ChatMessage,
+  ChatSpec,
+  ChatState,
+  PendingUpload,
+  SpeechRecognitionState,
+} from '@proto-shared/types';
+import {
+  createSpeechRecognition,
+  detectSpeechRecognitionSupport,
+} from '@/composables/chat-session/speech';
+
+// 实验功能：启用 MediaRecorder 录音发送音频消息（默认关闭，优先使用 Web Speech API 语音转文字）
+const ENABLE_AUDIO_MESSAGE = false;
 
 export function useQwenPawChatSession() {
   const state = ref<ChatState>(createInitialState());
@@ -85,6 +98,12 @@ export function useQwenPawChatSession() {
   const recordingStream = ref<MediaStream | null>(null);
   const recordingChunks = ref<Blob[]>([]);
   const recordingMimeType = ref('');
+  const speechRecognitionRef = ref<ReturnType<typeof createSpeechRecognition> | null>(null);
+  const speechState = ref<SpeechRecognitionState>({
+    status: detectSpeechRecognitionSupport() ? 'idle' : 'unsupported',
+    errorMessage: '',
+    interimTranscript: '',
+  });
   const localCompletionController = ref<AbortController | null>(null);
   const localCompletionTimer = ref<ReturnType<typeof setTimeout> | null>(null);
   const uploadControllers = new Map<string, AbortController>();
@@ -100,7 +119,8 @@ export function useQwenPawChatSession() {
   const hasPendingUploadsInFlight = computed(() =>
     state.value.pendingUploads.some((upload) => upload.status === 'uploading'),
   );
-  const canRecord = computed(() => detectRecordingSupport());
+  const canRecord = computed(() => ENABLE_AUDIO_MESSAGE && detectRecordingSupport());
+  const canSpeech = computed(() => detectSpeechRecognitionSupport());
   const canSubmit = computed(() => {
     if (state.value.isSending) {
       return false;
@@ -349,6 +369,7 @@ export function useQwenPawChatSession() {
   }
 
   async function startRecording(): Promise<void> {
+    if (!ENABLE_AUDIO_MESSAGE) return;
     if (!canRecord.value || state.value.isSending || hasPendingUploadsInFlight.value) {
       state.value.recordingState = canRecord.value
         ? state.value.recordingState
@@ -441,6 +462,7 @@ export function useQwenPawChatSession() {
   }
 
   function stopRecordingCapture(): void {
+    if (!ENABLE_AUDIO_MESSAGE) return;
     if (!mediaRecorder.value || state.value.recordingState.status !== 'recording') {
       return;
     }
@@ -449,6 +471,7 @@ export function useQwenPawChatSession() {
   }
 
   function cancelRecording(): void {
+    if (!ENABLE_AUDIO_MESSAGE) return;
     if (!mediaRecorder.value) {
       state.value.recordingState = createIdleRecordingState();
       return;
@@ -458,6 +481,67 @@ export function useQwenPawChatSession() {
     mediaRecorder.value.stop();
     cleanupRecorder();
     state.value.recordingState = createIdleRecordingState();
+  }
+
+  function startSpeechRecognition(): void {
+    if (!canSpeech.value || state.value.isSending) {
+      if (!canSpeech.value) {
+        speechState.value = { status: 'unsupported', errorMessage: '当前浏览器不支持语音识别。', interimTranscript: '' };
+      }
+      return;
+    }
+
+    if (speechState.value.status === 'listening') {
+      return;
+    }
+
+    const recognition = createSpeechRecognition({
+      onStart: () => {
+        speechState.value = { status: 'listening', errorMessage: '', interimTranscript: '' };
+      },
+      onEnd: () => {
+        // 如果有 interim transcript，确认追加到 draft
+        const interim = speechState.value.interimTranscript;
+        if (interim) {
+          const separator = draft.value ? ' ' : '';
+          draft.value = draft.value + separator + interim;
+        }
+        speechState.value = { status: 'idle', errorMessage: '', interimTranscript: '' };
+        speechRecognitionRef.value = null;
+      },
+      onError: (errorMessage) => {
+        speechState.value = { status: 'error', errorMessage, interimTranscript: '' };
+        speechRecognitionRef.value = null;
+      },
+      onResult: (transcript, isFinal) => {
+        if (isFinal) {
+          const separator = draft.value ? ' ' : '';
+          draft.value = draft.value + separator + transcript;
+          speechState.value = { ...speechState.value, interimTranscript: '' };
+        } else {
+          speechState.value = { ...speechState.value, interimTranscript: transcript };
+        }
+      },
+    });
+
+    if (!recognition) {
+      speechState.value = { status: 'unsupported', errorMessage: '当前浏览器不支持语音识别。', interimTranscript: '' };
+      return;
+    }
+
+    speechRecognitionRef.value = recognition;
+    try {
+      recognition.start();
+    } catch {
+      speechState.value = { status: 'error', errorMessage: '无法启动语音识别。', interimTranscript: '' };
+      speechRecognitionRef.value = null;
+    }
+  }
+
+  function stopSpeechRecognition(): void {
+    if (speechRecognitionRef.value && speechState.value.status === 'listening') {
+      speechRecognitionRef.value.stop();
+    }
   }
 
   async function sendDraft(options: SendDraftOptions): Promise<void> {
@@ -625,6 +709,10 @@ export function useQwenPawChatSession() {
     localCompletionController.value?.abort();
     clearLocalCompletionTimer();
     cleanupRecorder();
+    if (speechRecognitionRef.value) {
+      speechRecognitionRef.value.abort();
+      speechRecognitionRef.value = null;
+    }
     disposePendingUploads(state.value.pendingUploads);
   });
 
@@ -649,6 +737,8 @@ export function useQwenPawChatSession() {
     hasPendingUploads,
     hasPendingUploadsInFlight,
     canRecord,
+    canSpeech,
+    speechState,
     canSubmit,
     addPendingFiles,
     retryPendingUpload,
@@ -662,6 +752,8 @@ export function useQwenPawChatSession() {
     startRecording,
     stopRecordingCapture,
     cancelRecording,
+    startSpeechRecognition,
+    stopSpeechRecognition,
     stopStreaming,
   };
 
@@ -957,10 +1049,19 @@ export function useQwenPawChatSession() {
       state.value.recordingState.status !== 'recording' &&
       state.value.recordingState.status !== 'processing'
     ) {
-      state.value.recordingState = canRecord.value
+      state.value.recordingState = ENABLE_AUDIO_MESSAGE && canRecord.value
         ? createIdleRecordingState()
         : createUnsupportedRecordingState();
     }
+    if (speechState.value.status === 'listening' && speechRecognitionRef.value) {
+      speechRecognitionRef.value.abort();
+      speechRecognitionRef.value = null;
+    }
+    speechState.value = {
+      status: detectSpeechRecognitionSupport() ? 'idle' : 'unsupported',
+      errorMessage: '',
+      interimTranscript: '',
+    };
   }
 
   function consumeComposerState(): ComposerSnapshot {
