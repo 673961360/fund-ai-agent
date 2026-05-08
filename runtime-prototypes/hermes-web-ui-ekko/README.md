@@ -52,7 +52,12 @@ hermes-web-ui start --port 9000
 | 脚本 | 说明 |
 |---|---|
 | `install.bat` | 一键安装依赖 + 配置 Hermes 地址 + 启动（新机首选） |
-| `hermes.bat <command>` | CLI 入口，支持 `install`/`config`/`start`/`stop`/`status`/`update` |
+| `start.bat` | 启动 Web UI（自动加载 `.env` 配置） |
+| `stop.bat` | 停止 Web UI |
+| `status.bat` | 查看运行状态 |
+| `update.bat` | 更新到最新版本 |
+| `config.bat` | 配置 Hermes 连接地址（自动扫描端口） |
+| `hermes.bat <command>` | CLI 入口（等价于上方所有脚本） |
 
 ## 目录结构
 
@@ -63,9 +68,14 @@ hermes-web-ui-ekko/
 ├── .env.example         # Docker 环境变量模板
 ├── .env                 # 本地运行时配置（hermes.py config 自动生成，不入库）
 ├── .gitignore
-├── install.bat          # 首次引导脚本：安装 uv + 依赖 + hermes-web-ui
-├── hermes.bat           # Windows 快捷入口 → hermes.py
-└── hermes.py            # Python CLI 统一管理
+├── install.bat          # 首次引导脚本：安装依赖 + 配置 + 启动
+├── hermes.bat           # CLI 快捷入口 → hermes.py
+├── hermes.py            # Python CLI 统一管理
+├── start.bat            # 启动（→ hermes.py start）
+├── stop.bat             # 停止（→ hermes.py stop）
+├── status.bat           # 状态（→ hermes.py status）
+├── update.bat           # 更新（→ hermes.py update）
+└── config.bat           # 配置（→ hermes.py config）
 ```
 
 ## 架构与数据流
