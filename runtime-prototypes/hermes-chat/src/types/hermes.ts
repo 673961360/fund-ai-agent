@@ -100,14 +100,91 @@ export interface HermesToolProgressEvent {
   label: string;
 }
 
-/** 统一流事件类型 */
+// ---- Responses API 类型 ----
+
+/** Responses API 请求体 */
+export interface HermesCreateResponseRequest {
+  input: string;
+  conversation?: string;
+  stream?: boolean;
+  store?: boolean;
+  truncation?: 'auto';
+  model?: string;
+}
+
+/** SSE event: response.created */
+export interface ResponsesResponseCreated {
+  response: { id: string };
+}
+
+/** SSE event: response.output_text.delta */
+export interface ResponsesTextDelta {
+  delta: string;
+  content_index: number;
+  output_index: number;
+}
+
+/** SSE event: response.output_text.done */
+export interface ResponsesTextDone {
+  text: string;
+  content_index: number;
+  output_index: number;
+}
+
+/** Responses API 输出项通用结构 */
+export interface ResponsesOutputItem {
+  type: 'message' | 'function_call' | 'function_call_output';
+  call_id?: string;
+  name?: string;
+  arguments?: string;
+  output?: Array<{ type: string; text?: string }>;
+  status?: 'completed' | 'failed';
+  content?: Array<{ type: string; text?: string }>;
+}
+
+/** SSE event: response.output_item.added */
+export interface ResponsesItemAdded {
+  item: ResponsesOutputItem;
+}
+
+/** SSE event: response.output_item.done */
+export interface ResponsesItemDone {
+  item: ResponsesOutputItem;
+}
+
+/** SSE event: response.completed */
+export interface ResponsesCompleted {
+  response: {
+    id: string;
+    output: ResponsesOutputItem[];
+    usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
+  };
+}
+
+/** SSE event: response.failed */
+export interface ResponsesFailed {
+  response: { error?: { message?: string } };
+}
+
+/** 统一流事件类型（扩展 Responses API 事件） */
 export type HermesStreamEvent =
   | { type: 'role.start'; role: string }
   | { type: 'text.delta'; text: string }
   | { type: 'tool.progress'; tool: string; emoji: string; label: string }
   | { type: 'finish'; reason: string; usage?: Record<string, number> }
   | { type: 'done' }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  // Responses API
+  | { type: 'response.created'; responseId: string }
+  | { type: 'response.output_text.delta'; text: string }
+  | { type: 'response.output_text.done'; text: string }
+  | { type: 'response.output_item.added.function_call'; name: string; argumentsText: string; callId: string }
+  | { type: 'response.output_item.done.function_call'; name: string; callId: string }
+  | { type: 'response.output_item.added.function_call_output'; outputText: string; callId: string }
+  | { type: 'response.output_item.done.function_call_output'; callId: string }
+  | { type: 'response.output_item.done.message'; content: Array<{ type: string; text?: string }> }
+  | { type: 'response.completed'; output: ResponsesOutputItem[]; usage?: Record<string, number> }
+  | { type: 'response.failed'; message: string };
 
 /** /health 响应 */
 export interface HermesHealthResponse {
@@ -115,7 +192,7 @@ export interface HermesHealthResponse {
   platform?: string;
 }
 
-/** SSE 流事件回调 */
+/** SSE 流事件回调（扩展 Responses API 回调） */
 export interface HermesSSEHandlers {
   onTextDelta: (text: string) => void;
   onRoleStart: (role: string) => void;
@@ -123,4 +200,14 @@ export interface HermesSSEHandlers {
   onFinish: (reason: string, usage?: Record<string, number>) => void;
   onDone: () => void;
   onError: (error: string) => void;
+  // Responses API 可选回调
+  onResponseCreated?: (responseId: string) => void;
+  onResponseTextDelta?: (delta: string) => void;
+  onResponseTextDone?: (text: string) => void;
+  onToolCallAdded?: (name: string, argumentsText: string, callId: string) => void;
+  onToolCallDone?: (name: string, callId: string) => void;
+  onToolCallOutputAdded?: (outputText: string, callId: string) => void;
+  onToolCallOutputDone?: (callId: string) => void;
+  onResponseCompleted?: (output: ResponsesOutputItem[], usage?: Record<string, number>) => void;
+  onResponseFailed?: (message: string) => void;
 }

@@ -111,6 +111,7 @@ export function buildHermesMessages(
   return result;
 }
 
+
 function extractAnswerText(message: ChatMessage): string {
   const answerSections = (message.sections ?? [])
     .filter((s) => s.kind === 'answer' && s.content.length > 0);

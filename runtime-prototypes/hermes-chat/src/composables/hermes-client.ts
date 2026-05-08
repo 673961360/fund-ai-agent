@@ -2,6 +2,7 @@ import { fetchResponse } from '@proto-shared/fetch-client';
 import type {
   HermesConfig,
   HermesConfigFormState,
+  HermesCreateResponseRequest,
   HermesHealthResponse,
 } from '@/types/hermes';
 
@@ -79,6 +80,40 @@ export async function sendChatCompletion(
       messages,
       stream: true,
     }),
+    signal,
+  });
+}
+
+/**
+ * 发送 Responses API 请求，返回 raw Response 供 SSE 消费。
+ * POST /v1/responses — 服务端通过 conversation 参数自动管理上下文。
+ */
+export async function sendResponse(
+  config: HermesConfig,
+  input: string,
+  conversationId: string | null,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const url = buildUrl(config.proxyPrefix, '/v1/responses');
+  const body: HermesCreateResponseRequest = {
+    input,
+    stream: true,
+    store: true,
+    truncation: 'auto',
+  };
+  if (conversationId) {
+    body.conversation = conversationId;
+  }
+  if (config.model) {
+    body.model = config.model;
+  }
+  return fetchResponse({
+    url,
+    method: 'POST',
+    accept: 'text/event-stream',
+    contentType: 'application/json',
+    token: config.apiKey || null,
+    body: JSON.stringify(body),
     signal,
   });
 }

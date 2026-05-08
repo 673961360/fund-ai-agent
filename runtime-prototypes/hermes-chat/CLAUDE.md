@@ -2,7 +2,7 @@
 
 ## 项目定位
 
-`runtime-prototypes/hermes-chat` 下的实验性前端原型。用于验证 Hermes Agent API Server 的 Chat Completions 接口联调和交互体验。
+`runtime-prototypes/hermes-chat` 下的实验性前端原型。用于验证 Hermes Agent API Server 的 Responses API 接口联调和交互体验。
 
 ## 技术栈
 
@@ -15,14 +15,14 @@
 
 1. **API Key 仅限本地开发原型**。生产环境须由后端网关代理 Hermes 并注入鉴权。
 2. **浏览器侧请求统一走 Vite 代理前缀** (`/hermes-api`)，不得直接访问 `http://127.0.0.1:8056`。
-3. **SSE 解析按标准实现**：多行 data、CRLF/LF、TextDecoder stream、空行派发、keepalive 跳过、`[DONE]` 终止、AbortError 不作为错误。
-4. **发送历史仅含 user/assistant/system 纯文本**，不回传 tool/thinking/UI meta，限制最近 20 轮。
+3. **SSE 解析按标准实现**：多行 data、CRLF/LF、TextDecoder stream、空行派发、keepalive 跳过、`event:` 命名事件、`[DONE]` 终止、AbortError 不作为错误。
+4. **Responses API 通过 `conversation` 参数管理服务端上下文**，前端只需发送新消息文本。旧 Chat Completions 模式仍保留向后兼容。
 5. **HermesConfig 预留** agentId/model/profile 字段（暂不启用）。
 6. **不修改 `../shared/`**，除非先说明必要性并等待确认。
 
 ## API 选择
 
-使用 **Chat Completions** (`/v1/chat/completions`)，无状态模式。未来可切到 Responses API。
+使用 **Responses API** (`/v1/responses`)，服务端通过 `conversation` 参数自动管理多轮对话上下文。旧 Chat Completions 接口保留向后兼容。
 
 ## 目录速查
 
@@ -46,7 +46,7 @@
 - **无用户登录**：全局 API Key，无用户体系
 - **聊天历史**：Hermes 无历史查询端点，消息通过 localStorage 持久化，刷新后可恢复
 - **无文件上传/录音/语音**：Hermes API Server 不支持
-- **无流式重连**：Chat Completions 无状态
+- **无流式重连**：Responses API 通过 `conversation` 参数维持上下文
 
 ## 运行方式
 

@@ -1,6 +1,26 @@
-# Hermes Web UI (EKKO) 部署目录
+# Hermes Web UI (EKKO) 部署封装
 
 [EKKOLearnAI/hermes-web-ui](https://github.com/EKKOLearnAI/hermes-web-ui) 的本地部署封装。
+
+## 为什么本目录没有 hermes-web-ui 源码？
+
+这是一个**部署封装目录**，不包含 hermes-web-ui 的前端源码。
+
+- **源码在**：npm 包 `hermes-web-ui`（全局安装后位于 Node.js 全局模块目录）
+- **源码仓库**：https://github.com/EKKOLearnAI/hermes-web-ui
+- **npm 包**：https://www.npmjs.com/package/hermes-web-ui
+- **本目录职责**：提供一键安装/启停的 bat 脚本 + Docker Compose 编排，降低本地部署门槛
+
+如果需要对 hermes-web-ui 进行二次开发，请 clone 上游源码仓库：
+
+```
+git clone https://github.com/EKKOLearnAI/hermes-web-ui.git
+cd hermes-web-ui
+npm install
+npm run dev
+```
+
+---
 
 ## 快速启动（npm 全局安装 — 当前已采用）
 
@@ -31,6 +51,7 @@ hermes-web-ui start --port 9000
 
 | 脚本 | 说明 |
 |---|---|
+| `install.bat` | 一键安装 + 启动（新机首选） |
 | `start.bat` | 启动 Web UI（后台守护进程模式） |
 | `stop.bat` | 停止 Web UI |
 | `status.bat` | 查看运行状态 |
@@ -44,6 +65,7 @@ hermes-web-ui-ekko/
 ├── docker-compose.yml   # Docker 联合部署编排（备用）
 ├── .env.example         # Docker 环境变量模板
 ├── .gitignore
+├── install.bat          # 一键安装+启动（新）
 ├── start.bat            # 启动脚本
 ├── stop.bat             # 停止脚本
 ├── status.bat           # 状态脚本
@@ -56,7 +78,7 @@ hermes-web-ui-ekko/
 |---|---|---|
 | **npm 全局安装**（当前） | 已有 Hermes Agent 运行中 | `hermes-web-ui start` |
 | **Docker Compose** | 联合部署 Hermes Agent + Web UI | `.\start.bat` |
-| **开发模式** | 二次开发 | `git clone` + `npm install` + `npm run dev` |
+| **开发模式** | 二次开发 | `git clone` 源码 + `npm install` + `npm run dev` |
 
 ## 与已有 Hermes 对接
 

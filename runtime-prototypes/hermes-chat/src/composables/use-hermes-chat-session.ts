@@ -1,12 +1,11 @@
 import { ref, computed } from 'vue';
-import { getHermesConfig, sendChatCompletion } from './hermes-client';
+import { getHermesConfig, sendResponse } from './hermes-client';
 import { consumeHermesSSEStream } from './hermes-sse';
-import type { ChatMessage } from '@/types/hermes';
+import type { ChatMessage, ResponsesOutputItem } from '@/types/hermes';
 import type { StreamOutcome } from './hermes-session/types';
 import {
   createUserMessage,
   createAssistantMessage,
-  buildHermesMessages,
   toErrorMessage,
 } from './hermes-session/message-helpers';
 import {
@@ -17,6 +16,7 @@ import {
 } from './hermes-session/stream';
 
 const MESSAGES_STORAGE_KEY = 'hermes_chat_messages';
+const CONVERSATION_ID_KEY = 'hermes_conversation_id';
 
 /** 序列化，失败返回 null（QUOTA_EXCEEDED 或其他） */
 function trySerializeMessages(messages: ChatMessage[]): string | null {
@@ -40,6 +40,15 @@ function loadMessages(): ChatMessage[] {
     );
   } catch {
     return [];
+  }
+}
+
+/** 恢复会话 ID */
+function loadConversationId(): string | null {
+  try {
+    return localStorage.getItem(CONVERSATION_ID_KEY) || null;
+  } catch {
+    return null;
   }
 }
 
@@ -69,11 +78,20 @@ function persistMessages(messages: ChatMessage[]): void {
   }
 }
 
+function persistConversationId(id: string): void {
+  try {
+    localStorage.setItem(CONVERSATION_ID_KEY, id);
+  } catch {
+    // 静默忽略
+  }
+}
+
 export function useHermesChatSession() {
   const messages = ref<ChatMessage[]>(loadMessages());
   const draft = ref('');
   const isSending = ref(false);
   const errorMessage = ref<string | null>(null);
+  const conversationId = ref<string | null>(loadConversationId());
 
   const activeController = ref<AbortController | null>(null);
 
@@ -105,8 +123,7 @@ export function useHermesChatSession() {
 
     try {
       const config = getHermesConfig();
-      const hermesMessages = buildHermesMessages(messages.value, text);
-      const response = await sendChatCompletion(config, hermesMessages, controller.signal);
+      const response = await sendResponse(config, text, conversationId.value, controller.signal);
 
       if (!response.ok) {
         const errText = await response.text().catch(() => '');
@@ -123,6 +140,7 @@ export function useHermesChatSession() {
       await consumeHermesSSEStream(
         response,
         {
+          // 旧 Chat Completions 回调（保留向后兼容，Responses API 不会触发）
           onTextDelta: (delta) => {
             applyHermesStreamEvent(
               { type: 'text.delta', text: delta },
@@ -157,6 +175,71 @@ export function useHermesChatSession() {
           onError: (error) => {
             applyHermesStreamEvent(
               { type: 'error', message: error },
+              reactiveMsg,
+              outcome,
+            );
+          },
+
+          // ---- Responses API 回调 ----
+          onResponseCreated: (responseId) => {
+            applyHermesStreamEvent(
+              { type: 'response.created', responseId },
+              reactiveMsg,
+              outcome,
+            );
+          },
+          onResponseTextDelta: (delta) => {
+            applyHermesStreamEvent(
+              { type: 'response.output_text.delta', text: delta },
+              reactiveMsg,
+              outcome,
+            );
+          },
+          onResponseTextDone: (text) => {
+            applyHermesStreamEvent(
+              { type: 'response.output_text.done', text },
+              reactiveMsg,
+              outcome,
+            );
+          },
+          onToolCallAdded: (name, args, callId) => {
+            applyHermesStreamEvent(
+              { type: 'response.output_item.added.function_call', name, argumentsText: args, callId },
+              reactiveMsg,
+              outcome,
+            );
+          },
+          onToolCallDone: (name, callId) => {
+            applyHermesStreamEvent(
+              { type: 'response.output_item.done.function_call', name, callId },
+              reactiveMsg,
+              outcome,
+            );
+          },
+          onToolCallOutputAdded: (outputText, callId) => {
+            applyHermesStreamEvent(
+              { type: 'response.output_item.added.function_call_output', outputText, callId },
+              reactiveMsg,
+              outcome,
+            );
+          },
+          onToolCallOutputDone: (callId) => {
+            applyHermesStreamEvent(
+              { type: 'response.output_item.done.function_call_output', callId },
+              reactiveMsg,
+              outcome,
+            );
+          },
+          onResponseCompleted: (output, usage) => {
+            applyHermesStreamEvent(
+              { type: 'response.completed', output: output as ResponsesOutputItem[], usage },
+              reactiveMsg,
+              outcome,
+            );
+          },
+          onResponseFailed: (message) => {
+            applyHermesStreamEvent(
+              { type: 'response.failed', message },
               reactiveMsg,
               outcome,
             );
@@ -200,8 +283,10 @@ export function useHermesChatSession() {
     messages.value = [];
     errorMessage.value = null;
     draft.value = '';
+    conversationId.value = null;
     resetToolCounter();
     localStorage.removeItem(MESSAGES_STORAGE_KEY);
+    localStorage.removeItem(CONVERSATION_ID_KEY);
   }
 
   return {
@@ -210,6 +295,7 @@ export function useHermesChatSession() {
     isSending,
     errorMessage,
     canSubmit,
+    conversationId,
     sendDraft,
     stopStreaming,
     clearConversation,

@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git restore *)",
+      "Bash(Select-String \"^M?\\\\?\\\\?\")",
+      "Bash(Select-String \"hermes-chat\")",
+      "Bash(Select-String \"^[AM]\")",
+      "Bash(Select-Object -First 50)",
+      "Bash(rm *)",
+      "Bash(npx skills *)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:developer.volcengine.com)",
+      "Bash(Get-ChildItem -Force \"D:\\\\个人本地知识库\\\\yfbcode\\\\fund-ai\\\\fund_ai_agent\\\\runtime-prototypes\\\\hermes-web-ui-ekko\")",
+      "Bash(Select-Object Name)",
+      "Bash(npm -v)",
+      "Bash(hermes-web-ui start *)",
+      "Bash(hermes-web-ui status *)",
+      "Bash(netstat -ano)",
+      "Bash(where hermes *)",
+      "Bash(tasklist *)",
+      "Bash(wmic process *)"
+    ]
+  }
+}

@@ -99,6 +99,90 @@ function processSegment(segment: string, handlers: HermesSSEHandlers): void {
     return;
   }
 
+  // ---- Responses API 命名事件 ----
+
+  if (eventType === 'response.created') {
+    try {
+      const parsed = JSON.parse(payload);
+      handlers.onResponseCreated?.(parsed?.response?.id ?? '');
+    } catch { /* 忽略 */ }
+    return;
+  }
+
+  if (eventType === 'response.output_text.delta') {
+    try {
+      const parsed = JSON.parse(payload);
+      handlers.onResponseTextDelta?.(parsed?.delta ?? '');
+    } catch { /* 忽略 */ }
+    return;
+  }
+
+  if (eventType === 'response.output_text.done') {
+    try {
+      const parsed = JSON.parse(payload);
+      handlers.onResponseTextDone?.(parsed?.text ?? '');
+    } catch { /* 忽略 */ }
+    return;
+  }
+
+  if (eventType === 'response.output_item.added') {
+    try {
+      const parsed = JSON.parse(payload);
+      const item = parsed?.item;
+      if (!item) return;
+      if (item.type === 'function_call') {
+        handlers.onToolCallAdded?.(
+          item.name ?? '',
+          item.arguments ?? '',
+          item.call_id ?? '',
+        );
+      } else if (item.type === 'function_call_output') {
+        const outputText = extractOutputText(item.output);
+        handlers.onToolCallOutputAdded?.(outputText, item.call_id ?? '');
+      }
+    } catch { /* 忽略 */ }
+    return;
+  }
+
+  if (eventType === 'response.output_item.done') {
+    try {
+      const parsed = JSON.parse(payload);
+      const item = parsed?.item;
+      if (!item) return;
+      if (item.type === 'function_call') {
+        handlers.onToolCallDone?.(
+          item.name ?? '',
+          item.call_id ?? '',
+        );
+      } else if (item.type === 'function_call_output') {
+        handlers.onToolCallOutputDone?.(item.call_id ?? '');
+      }
+      // message 类型不需要额外处理（文本已通过 delta 流式到达）
+    } catch { /* 忽略 */ }
+    return;
+  }
+
+  if (eventType === 'response.completed') {
+    try {
+      const parsed = JSON.parse(payload);
+      const resp = parsed?.response;
+      handlers.onResponseCompleted?.(
+        resp?.output ?? [],
+        resp?.usage as Record<string, number> | undefined,
+      );
+    } catch { /* 忽略 */ }
+    return;
+  }
+
+  if (eventType === 'response.failed') {
+    try {
+      const parsed = JSON.parse(payload);
+      const msg = parsed?.response?.error?.message ?? 'Response failed';
+      handlers.onResponseFailed?.(msg);
+    } catch { /* 忽略 */ }
+    return;
+  }
+
   // 标准 data 事件（Chat Completions chunk）
   try {
     const chunk = JSON.parse(payload) as {
@@ -126,6 +210,18 @@ function processSegment(segment: string, handlers: HermesSSEHandlers): void {
   } catch {
     // JSON 解析失败的非 [DONE] 数据 — 静默忽略
   }
+}
+
+/** 从 function_call_output 的 output 数组中提取文本 */
+function extractOutputText(output: Array<{ type: string; text?: string }> | undefined): string {
+  if (!output || !Array.isArray(output)) return '';
+  return output
+    .map((item) => {
+      if (item.type === 'input_text' || item.type === 'output_text') return item.text ?? '';
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n');
 }
 
 function isAbortError(error: unknown): boolean {
