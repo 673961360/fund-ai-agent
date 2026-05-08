@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 echo ============================================
-echo   Hermes Web UI (EKKO) - Install ^& Start
+echo   Hermes Web UI (EKKO) - Install
 echo ============================================
 echo.
 
@@ -36,5 +36,9 @@ if %errorlevel% neq 0 (
 echo.
 echo [OK] hermes-web-ui installed successfully.
 echo.
-echo [INFO] Starting...
+echo [INFO] Opening Hermes address configuration...
+call config.bat
+
+echo.
+echo [INFO] Launching...
 call start.bat
