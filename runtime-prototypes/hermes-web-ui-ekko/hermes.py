@@ -29,14 +29,12 @@ def _require_hermes_web_ui():
 
 
 def _run_hermes_cmd(*args: str):
-    """Run hermes-web-ui CLI with given args, exit on failure.
-    shell=True needed on Windows to resolve .cmd/.bat files in PATH.
-    """
-    result = subprocess.run(
-        ["hermes-web-ui", *args],
-        check=False,
-        shell=True,
-    )
+    """Run hermes-web-ui CLI with given args, exit on failure."""
+    exe = shutil.which("hermes-web-ui")
+    if not exe:
+        print("[ERROR] hermes-web-ui executable not found.")
+        sys.exit(1)
+    result = subprocess.run([exe, *args], check=False)
     if result.returncode != 0:
         sys.exit(result.returncode)
 
@@ -48,14 +46,13 @@ def _scan_ports(ports: list[int] = None) -> list[int]:
 
     found = []
     for port in ports:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(0.5)
-        try:
-            s.connect(("127.0.0.1", port))
-            s.close()
-            found.append(port)
-        except (ConnectionRefusedError, OSError):
-            pass
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.5)
+            try:
+                s.connect(("127.0.0.1", port))
+                found.append(port)
+            except (ConnectionRefusedError, OSError):
+                pass
     return found
 
 
@@ -142,7 +139,6 @@ def run_install():
     print("[OK] hermes-web-ui installed successfully.")
     print()
 
-    # Run config and start automatically
     print("[INFO] Configuring Hermes address...")
     run_config()
 
@@ -156,7 +152,6 @@ def run_start():
 
     _require_hermes_web_ui()
 
-    # Load .env and set environment
     env_vars = _load_env()
     if env_vars:
         for key, value in env_vars.items():
