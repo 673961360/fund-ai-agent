@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Hermes Web UI CLI — 统一管理安装、配置、启停、更新。"""
 import argparse
+import os
 import shutil
 import socket
 import subprocess
@@ -28,10 +29,13 @@ def _require_hermes_web_ui():
 
 
 def _run_hermes_cmd(*args: str):
-    """Run hermes-web-ui CLI with given args, exit on failure."""
+    """Run hermes-web-ui CLI with given args, exit on failure.
+    shell=True needed on Windows to resolve .cmd/.bat files in PATH.
+    """
     result = subprocess.run(
         ["hermes-web-ui", *args],
         check=False,
+        shell=True,
     )
     if result.returncode != 0:
         sys.exit(result.returncode)
@@ -145,6 +149,59 @@ def run_install():
     print()
     print("[INFO] Launching...")
     run_start()
+
+
+def run_start():
+    _print_banner("Hermes Web UI (EKKO) - Start")
+
+    _require_hermes_web_ui()
+
+    # Load .env and set environment
+    env_vars = _load_env()
+    if env_vars:
+        for key, value in env_vars.items():
+            os.environ[key] = value
+        if "UPSTREAM" in env_vars:
+            print(f"[INFO] Using UPSTREAM={env_vars['UPSTREAM']} from .env")
+
+    # Default: disable auth unless AUTH_TOKEN or AUTH_DISABLED is set
+    if "AUTH_TOKEN" not in os.environ and "AUTH_DISABLED" not in os.environ:
+        os.environ["AUTH_DISABLED"] = "1"
+
+    if os.environ.get("AUTH_DISABLED"):
+        print(f"[INFO] Auth is disabled (AUTH_DISABLED={os.environ['AUTH_DISABLED']})")
+
+    print("[INFO] Starting hermes-web-ui...")
+    _run_hermes_cmd("start")
+
+    print()
+    print("[OK] hermes-web-ui started. Open http://localhost:8648 in your browser.")
+
+
+def run_stop():
+    _print_banner("Hermes Web UI (EKKO) - Stop")
+
+    _require_hermes_web_ui()
+
+    print("[INFO] Stopping hermes-web-ui...")
+    _run_hermes_cmd("stop")
+
+
+def run_status():
+    _print_banner("Hermes Web UI (EKKO) - Status")
+
+    _require_hermes_web_ui()
+
+    _run_hermes_cmd("status")
+
+
+def run_update():
+    _print_banner("Hermes Web UI (EKKO) - Update")
+
+    _require_hermes_web_ui()
+
+    print("[INFO] Updating to latest version...")
+    _run_hermes_cmd("update")
 
 
 def main():
