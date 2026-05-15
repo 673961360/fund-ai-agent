@@ -30,6 +30,7 @@
 按需补读：
 
 - 前端任务：`docs/frontend/vue3-ruler-skills-compact.md`
+- 原型集成指引：`runtime-prototypes/qwenpaw-chat/INTEGRATION.md`、`runtime-prototypes/hermes-chat/INTEGRATION.md`
 - 进入执行准备：`docs/decisions/solution-proposal.md`、`docs/decisions/execution-checklist.md`
 - 需要全局背景：`README.md` 与相关 `docs/project/*.md`、`docs/demo/*.md`
 

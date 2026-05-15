@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(*)",
-      "WebFetch(domain:runtime.agentscope.io)",
-      "WebSearch"
-    ]
-  }
-}
