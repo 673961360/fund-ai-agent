@@ -34,7 +34,12 @@ def _run_hermes_cmd(*args: str):
     if not exe:
         print("[ERROR] hermes-web-ui executable not found.")
         sys.exit(1)
-    result = subprocess.run([exe, *args], check=False)
+    # On Windows, .cmd/.bat files must be run via cmd.exe /c
+    if exe.lower().endswith((".cmd", ".bat")):
+        cmd = ["cmd", "/c", exe, *args]
+    else:
+        cmd = [exe, *args]
+    result = subprocess.run(cmd, check=False)
     if result.returncode != 0:
         sys.exit(result.returncode)
 
@@ -152,6 +157,15 @@ def run_start():
 
     _require_hermes_web_ui()
 
+    # Point hermes-web-ui's gateway manager to the real hermes CLI
+    hermes_exe = Path(r"D:\代码\资金AI\tradercode\modules\Hermes\.venv\Scripts\hermes.exe")
+    if hermes_exe.exists():
+        os.environ["HERMES_BIN"] = str(hermes_exe)
+
+    # CRITICAL: hermes-web-ui defaults HERMES_HOME to %LOCALAPPDATA%\hermes on Windows,
+    # but Hermes Agent uses %USERPROFILE%\.hermes. Align them.
+    os.environ["HERMES_HOME"] = str(Path.home() / ".hermes")
+
     env_vars = _load_env()
     if env_vars:
         for key, value in env_vars.items():
@@ -190,13 +204,35 @@ def run_status():
     _run_hermes_cmd("status")
 
 
+def _run_npm(*args: str):
+    """Run npm CLI directly, exit on failure."""
+    npm = shutil.which("npm")
+    if not npm:
+        print("[ERROR] npm not found in PATH.")
+        sys.exit(1)
+    if npm.lower().endswith((".cmd", ".bat")):
+        cmd = ["cmd", "/c", npm, *args]
+    else:
+        cmd = [npm, *args]
+    result = subprocess.run(cmd, check=False)
+    if result.returncode != 0:
+        sys.exit(result.returncode)
+
+
 def run_update():
     _print_banner("Hermes Web UI (EKKO) - Update")
 
-    _require_hermes_web_ui()
+    if not shutil.which("npm"):
+        print("[ERROR] npm not found in PATH.")
+        sys.exit(1)
 
     print("[INFO] Updating to latest version...")
-    _run_hermes_cmd("update")
+    _run_npm("install", "-g", "hermes-web-ui@latest")
+
+    print()
+    print("[OK] hermes-web-ui updated successfully.")
+    print("[INFO] Restarting...")
+    run_start()
 
 
 def main():

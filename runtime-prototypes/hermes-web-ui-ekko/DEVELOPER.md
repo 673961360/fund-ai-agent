@@ -95,6 +95,8 @@ Browser (localhost:8648)
 | `CORS_ORIGINS` | `*` | 允许的跨域来源 |
 | `UPLOAD_DIR` | 系统临时目录 | 文件上传暂存路径 |
 | `PROFILE` | `default` | Hermes Profile 名称 |
+| `HERMES_BIN` | 自动设置 | `hermes` CLI 路径，由 `hermes.py start` 指向 Hermes Agent 的 `.venv/Scripts/hermes.exe`。v0.5.28+ 的 gateway manager 依赖此变量，路径写死在 `hermes.py` 中，换环境需同步修改 |
+| `HERMES_HOME` | 自动设置 | Hermes Agent 数据目录（含 `.env`、`config.yaml` 等）。v0.5.28+ 在 Windows 上默认查找 `%LOCALAPPDATA%\hermes`，但 Hermes Agent 实际使用 `%USERPROFILE%\.hermes`，由 `hermes.py start` 强制对齐 |
 
 **配置优先级**：CLI 参数 > `.env` 文件 > 环境变量 > 代码默认值
 
